@@ -10,6 +10,7 @@ from .constants import (
     CONF_ADDRESS,
     CONF_CHANNEL_MAP,
     CONF_CHANNELS,
+    CONF_ENCODING,
     CONF_KEEP_ALIVE,
     CONF_OUTPUT_NAME,
     CONF_PTIME,
@@ -19,10 +20,12 @@ from .constants import (
     CONF_TTL,
     DEFAULT_CHANNEL_MAP,
     DEFAULT_CHANNELS,
+    DEFAULT_ENCODING,
     DEFAULT_PTIME,
     DEFAULT_RTP_PORT,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_TTL,
+    ENCODINGS,
     PTIMES_US,
     SAMPLE_RATES,
 )
@@ -36,6 +39,7 @@ OUTPUT_KEYS = (
     CONF_CHANNEL_MAP,
     CONF_SAMPLE_RATE,
     CONF_PTIME,
+    CONF_ENCODING,
     CONF_TTL,
     CONF_SESSION_NAME,
     CONF_KEEP_ALIVE,
@@ -98,6 +102,9 @@ def output_config(values: dict[str, Any]) -> dict[str, Any]:
     ptime = int(values.get(CONF_PTIME) or DEFAULT_PTIME)
     if ptime not in PTIMES_US:
         raise ValueError(f"packet time {ptime} is not supported")
+    encoding = str(values.get(CONF_ENCODING) or DEFAULT_ENCODING)
+    if encoding not in ENCODINGS:
+        raise ValueError(f"encoding {encoding} is not supported")
     port = int(values.get(CONF_RTP_PORT) or DEFAULT_RTP_PORT)
     if not 1 <= port <= 65535:
         raise ValueError("the port is 1 to 65535")
@@ -109,6 +116,7 @@ def output_config(values: dict[str, Any]) -> dict[str, Any]:
         "channels": channels,
         "sample_rate": sample_rate,
         "ptime_us": ptime,
+        "encoding": encoding,
         "ttl": int(values.get(CONF_TTL) or DEFAULT_TTL),
         "channel_map": parse_channel_map(
             str(values.get(CONF_CHANNEL_MAP) or DEFAULT_CHANNEL_MAP), channels

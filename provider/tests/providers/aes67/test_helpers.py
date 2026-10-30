@@ -8,6 +8,7 @@ from music_assistant.providers.aes67.constants import (
     CONF_ADDRESS,
     CONF_CHANNEL_MAP,
     CONF_CHANNELS,
+    CONF_ENCODING,
     CONF_KEEP_ALIVE,
     CONF_OUTPUT_NAME,
     CONF_PTIME,
@@ -49,6 +50,7 @@ def test_output_config_defaults() -> None:
         "channels": 2,
         "sample_rate": 48000,
         "ptime_us": 1000,
+        "encoding": "L24",
         "ttl": 15,
         "channel_map": [1, 2],
         "keep_alive": True,
@@ -65,9 +67,11 @@ def test_output_config_values() -> None:
             CONF_CHANNEL_MAP: "7,8",
             CONF_SAMPLE_RATE: 96000,
             CONF_PTIME: 125,
+            CONF_ENCODING: "L16",
             CONF_KEEP_ALIVE: False,
         }
     )
+    assert config["encoding"] == "L16"
     assert config["channel_map"] == [7, 8]
     assert config["sample_rate"] == 96000
     assert config["ptime_us"] == 125
@@ -86,6 +90,7 @@ def test_output_config_values() -> None:
         ),
         ({CONF_OUTPUT_NAME: "x", CONF_ADDRESS: "239.1.1.1", CONF_PTIME: 2000}, "packet time"),
         ({CONF_OUTPUT_NAME: "x", CONF_ADDRESS: "239.1.1.1", CONF_CHANNEL_MAP: "3"}, "channels"),
+        ({CONF_OUTPUT_NAME: "x", CONF_ADDRESS: "239.1.1.1", CONF_ENCODING: "L20"}, "encoding"),
     ],
 )
 def test_output_config_refuses(values: dict[str, object], message: str) -> None:

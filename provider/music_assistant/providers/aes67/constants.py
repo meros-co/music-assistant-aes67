@@ -16,6 +16,7 @@ CONF_CHANNELS: Final = "channels"
 CONF_CHANNEL_MAP: Final = "channel_map"
 CONF_SAMPLE_RATE: Final = "sample_rate"
 CONF_PTIME: Final = "ptime_us"
+CONF_ENCODING: Final = "encoding"
 CONF_TTL: Final = "ttl"
 CONF_SESSION_NAME: Final = "session_name"
 CONF_KEEP_ALIVE: Final = "keep_alive"
@@ -27,10 +28,12 @@ DEFAULT_CHANNELS: Final = 2
 DEFAULT_CHANNEL_MAP: Final = "1,2"
 DEFAULT_SAMPLE_RATE: Final = 48000
 DEFAULT_PTIME: Final = 1000
+DEFAULT_ENCODING: Final = "L24"
 DEFAULT_TTL: Final = 15
 
 SAMPLE_RATES: Final = (44100, 48000, 96000)
 PTIMES_US: Final = (125, 250, 333, 1000, 4000)
+ENCODINGS: Final = ("L24", "L16")
 
 # how often the player reads the sender's state while playing, and while idle
 POLL_INTERVAL_PLAYING: Final = 1

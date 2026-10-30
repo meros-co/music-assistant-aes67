@@ -28,6 +28,10 @@
       "label": "Packet time",
       "description": "1 ms is the AES67 default every receiver accepts."
     },
+    "encoding": {
+      "label": "Encoding",
+      "description": "L24 (24-bit) is AES67's own; L16 (16-bit) is for receivers that take only L16, or to fit more channels in a packet."
+    },
     "ttl": {
       "label": "Multicast TTL",
       "description": "How many routers a multicast stream may cross."
