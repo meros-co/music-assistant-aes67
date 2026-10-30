@@ -7,12 +7,18 @@ description = "Sends Music Assistant audio to AES67 networks, timed by PTP"
 publish = false
 
 [dependencies]
+data-encoding = "2"
+getrandom = "0.3"
+if-addrs = "0.13"
 libc = "0.2"
 mdns-sd = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
+snow = "0.10"
 socket2 = { version = "0.5", features = ["all"] }
 tiny_http = "0.12"
+tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
 ureq = { version = "2", default-features = false }
 uuid = { version = "1", features = ["v5", "serde"] }
 
@@ -29,3 +35,6 @@ debug = false
 [profile.release]
 lto = true
 codegen-units = 1
+
+[dev-dependencies]
+snow = "0.10"

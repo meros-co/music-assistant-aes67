@@ -225,7 +225,11 @@ impl Tx {
     fn mix_output(&self, out: &Output, ts: MediaTime, fpp: usize, src: &mut Vec<f32>, mix: &mut [f32]) -> bool {
         let src_ch = out.cfg.source_channels();
         src.resize(fpp * src_ch, 0.0);
+        // Read even when disabled, so playout (and its writers) keep moving.
         let present = out.timeline.read(ts, src);
+        if out.nmos_disabled.load(Ordering::Relaxed) {
+            return false;
+        }
         let playing = {
             let s = out.session.lock().unwrap();
             match s.as_ref() {

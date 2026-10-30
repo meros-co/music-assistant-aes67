@@ -208,6 +208,8 @@ pub struct Output {
     pub generation: AtomicU64,
     /// Where the gain ramp is, owned by the transmit thread.
     pub gain_now: Mutex<f32>,
+    /// Turned off through NMOS IS-05 (master_enable false).
+    pub nmos_disabled: AtomicBool,
 }
 
 /// The playout buffer: about 2.7 s at 48 kHz, more than a Sendspin server
@@ -229,6 +231,7 @@ impl Output {
             underrun_frames: AtomicU64::new(0),
             generation: AtomicU64::new(0),
             gain_now: Mutex::new(0.0),
+            nmos_disabled: AtomicBool::new(false),
         })
     }
 
