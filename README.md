@@ -7,6 +7,10 @@ devices and other AES67 receivers can subscribe to it.
 
 It runs entirely in userspace on Home Assistant OS: no kernel modules.
 
+To install it, add `https://github.com/meros-co/music-assistant-aes67` as an add-on
+repository in Home Assistant (**Settings → Add-ons → Add-on Store → ⋮ → Repositories**),
+then install **AES67 Sender**. [DOCS.md](DOCS.md) describes its options.
+
 ## What is here
 
 | Path | What |
@@ -47,7 +51,8 @@ ptp4l (linuxptp 4.4) is built from source in the image, since Alpine doesn't pac
 ## Build and test
 
 ```sh
-cd sender
+git clone --recurse-submodules https://github.com/meros-co/music-assistant-aes67
+cd music-assistant-aes67/sender
 cargo test
 ```
 

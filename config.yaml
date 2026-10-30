@@ -2,6 +2,7 @@ name: AES67 Sender
 version: "0.1.0"
 slug: aes67_sender
 description: Plays Music Assistant to AES67 networks, timed by PTP
+url: https://github.com/meros-co/music-assistant-aes67
 arch:
   - aarch64
   - amd64

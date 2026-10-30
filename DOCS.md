@@ -5,6 +5,12 @@ Assistant, and so a `media_player` in Home Assistant. Its audio leaves as a PTP-
 stream that Q-SYS, Dante devices in AES67 mode, RAVENNA devices and other AES67 receivers
 can subscribe to.
 
+## Installation
+
+1. In Home Assistant, open **Settings → Add-ons → Add-on Store**, open the **⋮** menu,
+   choose **Repositories**, and add `https://github.com/meros-co/music-assistant-aes67`.
+2. Install **AES67 Sender**, add your outputs under **Configuration**, and start it.
+
 ## How it works
 
 - **Music Assistant finds the outputs by itself.** Each output is offered to Music Assistant
