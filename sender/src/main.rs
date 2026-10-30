@@ -136,9 +136,10 @@ fn run() -> Result<(), String> {
         token: Some(opts.api_token.clone()).filter(|t| !t.is_empty()),
         fixed,
     });
-    let server = tiny_http::Server::http((Ipv4Addr::UNSPECIFIED, opts.api_port)).map_err(|e| format!("API port {}: {e}", opts.api_port))?;
+    let api_ip: Ipv4Addr = opts.api_bind.parse().map_err(|_| format!("api_bind '{}' is not an IPv4 address", opts.api_bind))?;
+    let server = tiny_http::Server::http((api_ip, opts.api_port)).map_err(|e| format!("API port {}: {e}", opts.api_port))?;
     std::thread::spawn(move || api.serve(server));
-    log::info(&format!("control API on port {}", opts.api_port));
+    log::info(&format!("control API on {api_ip}:{}", opts.api_port));
 
     if opts.nmos {
         let seed_path = data_dir.join("nmos-seed");

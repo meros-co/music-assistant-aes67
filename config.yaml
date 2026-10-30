@@ -23,6 +23,7 @@ options:
   sendspin_port: 8928
   api_port: 8890
   api_token: ""
+  api_bind: 127.0.0.1
   nmos: true
   nmos_port: 8891
   debug: false
@@ -38,6 +39,7 @@ schema:
   sendspin_port: port
   api_port: port
   api_token: password?
+  api_bind: list(127.0.0.1|0.0.0.0)
   nmos: bool
   nmos_port: port
   debug: bool

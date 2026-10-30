@@ -28,6 +28,9 @@ configuration:
   api_token:
     name: Control API token
     description: When set, the provider must send it.
+  api_bind:
+    name: Control API listens on
+    description: 127.0.0.1 accepts only this Home Assistant host (where Music Assistant runs); 0.0.0.0 accepts the network. Set a token before opening it to the network.
   nmos:
     name: NMOS
     description: Register the streams with an NMOS registry (IS-04) and accept IS-05 connection changes.

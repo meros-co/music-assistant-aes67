@@ -25,6 +25,9 @@ fn d_latency() -> u32 {
 fn d_api() -> u16 {
     8890
 }
+fn d_api_bind() -> String {
+    "127.0.0.1".into()
+}
 fn d_nmos() -> u16 {
     8891
 }
@@ -77,6 +80,9 @@ pub struct AddonOptions {
     pub api_port: u16,
     #[serde(default)]
     pub api_token: String,
+    /// Where the control API listens: 127.0.0.1 (this host only) or 0.0.0.0 (the network).
+    #[serde(default = "d_api_bind")]
+    pub api_bind: String,
     #[serde(default = "d_true")]
     pub nmos: bool,
     #[serde(default = "d_nmos")]
