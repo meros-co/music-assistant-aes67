@@ -38,13 +38,14 @@ Add one entry under **Outputs** for each speaker:
 | `channel_map` | Which stream channels this speaker plays on. `1,2` sends left to 1 and right to 2; one number, such as `5`, sends a mono downmix there. | `1,2` |
 | `sample_rate` | 44100, 48000 or 96000. AES67 receivers expect 48000. | 48000 |
 | `ptime_us` | Packet time in microseconds. 1000 (1 ms) is the AES67 default that every receiver accepts. | 1000 |
+| `encoding` | `L24` (24-bit, AES67's own) or `L16` (16-bit, for receivers that take only L16, or to fit more channels in a packet). | `L24` |
 | `ttl` | Multicast TTL. | 15 |
 | `session_name` | The stream's name in SAP and NMOS. | the name |
 | `keep_alive` | Send silence while nothing plays, so receivers stay subscribed. | true |
 | `id` | A fixed id for the speaker. Without it, the id comes from the name, and renaming the speaker makes a new player in Music Assistant. | from the name |
 
 Several speakers can share one stream: give them the same `address` and `port`, the same
-`channels`, `sample_rate` and `ptime_us`, and different `channel_map` entries. For example,
+`channels`, `sample_rate`, `ptime_us` and `encoding`, and different `channel_map` entries. For example,
 an 8-channel stream to `239.69.1.10` can carry four stereo zones on channels 1–2, 3–4, 5–6
 and 7–8. A receiver subscribes to the stream once and picks the channels it needs.
 

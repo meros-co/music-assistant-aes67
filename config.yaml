@@ -53,6 +53,7 @@ schema:
       channel_map: str?
       sample_rate: list(44100|48000|96000)?
       ptime_us: list(125|250|333|1000|4000)?
+      encoding: list(L24|L16)?
       ttl: int(1,255)?
       session_name: str?
       keep_alive: bool?

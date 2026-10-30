@@ -40,4 +40,4 @@ configuration:
     name: Debug logging
   outputs:
     name: Outputs
-    description: "Each output is a speaker in Music Assistant. name and address are required; port (5004), channels (2), channel_map (1,2), sample_rate (48000), ptime_us (1000), ttl (15), session_name and keep_alive (true) are optional."
+    description: "Each output is a speaker in Music Assistant. name and address are required; port (5004), channels (2), channel_map (1,2), sample_rate (48000), ptime_us (1000), encoding (L24), ttl (15), session_name and keep_alive (true) are optional."
