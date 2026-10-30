@@ -44,14 +44,14 @@ impl PtpConfig {
 
     /// ptp4l's configuration: the AES67 media profile's default intervals.
     pub fn ptp4l_conf(&self) -> String {
-        let (slave_only, priority1, clock_class) = match self.role {
+        let (client_only, priority1, clock_class) = match self.role {
             PtpRole::LeaderIfNone => (0, 250, 248),
             _ => (1, 255, 255),
         };
         format!(
             "[global]\n\
              domainNumber {domain}\n\
-             slaveOnly {slave_only}\n\
+             clientOnly {client_only}\n\
              priority1 {priority1}\n\
              priority2 255\n\
              clockClass {clock_class}\n\
@@ -205,12 +205,12 @@ mod tests {
             ptp4l: "ptp4l".into(),
         };
         let conf = cfg.ptp4l_conf();
-        for line in ["free_running 1", "slaveOnly 1", "time_stamping software", "dscp_event 46", "[eth0]"] {
+        for line in ["free_running 1", "clientOnly 1", "time_stamping software", "dscp_event 46", "[eth0]"] {
             assert!(conf.lines().any(|l| l == line), "missing {line}");
         }
         assert!(conf.contains("uds_address /run/aes67"));
         let leader = PtpConfig { role: PtpRole::LeaderIfNone, ..cfg }.ptp4l_conf();
-        assert!(leader.lines().any(|l| l == "slaveOnly 0"));
+        assert!(leader.lines().any(|l| l == "clientOnly 0"));
         assert!(leader.lines().any(|l| l == "priority1 250"));
     }
 }
