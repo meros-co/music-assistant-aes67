@@ -1,0 +1,13 @@
+{
+  "type": "player",
+  "domain": "aes67",
+  "stage": "beta",
+  "name": "AES67",
+  "description": "Play to AES67 networks (Q-SYS, Dante in AES67 mode, RAVENNA and others): each output is a player that sends a PTP-timed AES67 stream through the AES67 Sender add-on.",
+  "codeowners": ["@meros-co"],
+  "requirements": [],
+  "documentation": "https://music-assistant.io/player-support/aes67/",
+  "icon": "lan",
+  "multi_instance": true,
+  "builtin": false
+}

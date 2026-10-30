@@ -1,0 +1,61 @@
+{
+  "config_entries": {
+    "output_name": {
+      "label": "Output name",
+      "description": "The player's name in Music Assistant and, unless a session name is set, the stream's name on the network."
+    },
+    "address": {
+      "label": "Destination address",
+      "description": "Where the stream goes: a multicast group (AES67 usually uses 239.x.x.x) or the IPv4 address of one receiver."
+    },
+    "rtp_port": {
+      "label": "Destination port",
+      "description": "AES67 streams use 5004 by convention."
+    },
+    "channels": {
+      "label": "Stream channels",
+      "description": "Channels in the AES67 stream. Several outputs can share one stream (the same address and port) on different channels."
+    },
+    "channel_map": {
+      "label": "Channel map",
+      "description": "Which stream channels this output plays on: '1,2' sends left to channel 1 and right to channel 2; one number (such as '5') sends a mono downmix."
+    },
+    "sample_rate": {
+      "label": "Sample rate",
+      "description": "AES67 receivers expect 48 kHz unless set otherwise."
+    },
+    "ptime_us": {
+      "label": "Packet time",
+      "description": "1 ms is the AES67 default every receiver accepts."
+    },
+    "ttl": {
+      "label": "Multicast TTL",
+      "description": "How many routers a multicast stream may cross."
+    },
+    "session_name": {
+      "label": "Session name",
+      "description": "The name receivers see in SAP and NMOS; the output name when empty."
+    },
+    "keep_alive": {
+      "label": "Send silence while idle",
+      "description": "Keep the stream running between tracks and while stopped, so receivers stay subscribed."
+    },
+    "sender_host": {
+      "label": "AES67 Sender address",
+      "description": "Where the AES67 Sender add-on runs. 127.0.0.1 when it runs on the same Home Assistant host."
+    },
+    "sender_port": {
+      "label": "AES67 Sender port",
+      "description": "The add-on's control API port (8890 by default)."
+    },
+    "sender_token": {
+      "label": "AES67 Sender token",
+      "description": "The add-on's API token, if one is set."
+    }
+  },
+  "errors": {
+    "cannot_connect": "The AES67 Sender did not answer at this address and port. Check that the add-on is running.",
+    "invalid_token": "The AES67 Sender refused the token.",
+    "invalid_output": "This output's settings are not valid."
+  }
+}
