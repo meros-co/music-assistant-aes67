@@ -232,7 +232,7 @@ impl Engine {
                 .collect::<Vec<_>>()
                 .join(" + ")
         };
-        let mut sdp = ffi::sdp_write(&ffi::SdpInput {
+        ffi::sdp_write(&ffi::SdpInput {
             session_name: &name,
             origin_ip: &self.net.iface_ip.to_string(),
             group: &s.key.address.to_string(),
@@ -245,22 +245,13 @@ impl Engine {
             ttl: s.format.ttl,
             gm_identity: gm,
             ptp_domain: domain as u16,
-        });
-        if !s.key.address.is_multicast() {
-            // RFC 4566: a TTL belongs only to a multicast connection address.
-            sdp = sdp.replace(
-                &format!("c=IN IP4 {}/{}\r\n", s.key.address, s.format.ttl),
-                &format!("c=IN IP4 {}\r\n", s.key.address),
-            );
-        }
-        if s.format.channels == 2 {
-            sdp.push_str("a=fmtp:");
-            sdp.push_str(&format!(
-                "{} channel-order=SMPTE2110.(ST)\r\n",
-                s.format.payload_type
-            ));
-        }
-        sdp
+            encoding: s.format.encoding,
+            channel_order: if s.format.channels == 2 {
+                "SMPTE2110.(ST)"
+            } else {
+                ""
+            },
+        })
     }
 
     /// Streams being sent and their SDP, for SAP.

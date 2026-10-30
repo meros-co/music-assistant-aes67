@@ -3,66 +3,25 @@
 
 //! SAP (RFC 2974) announcements of each stream's SDP on 239.255.255.255:9875,
 //! every 30 s, again at once when the SDP changes, and a deletion when a
-//! stream goes away.
+//! stream goes away. libaes67 builds the packets and hands out the message
+//! hashes; this keeps the schedule and the socket.
 
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use socket2::SockAddr;
 
+use crate::ffi;
 use crate::stream::{open_socket, NetConfig, StreamKey};
 
 pub const SAP_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 255);
 pub const SAP_PORT: u16 = 9875;
 pub const INTERVAL_MS: u64 = 30_000;
 
-/// The 16-bit message id hash: it changes whenever the SDP does, as RFC 2974 asks.
-pub fn msg_hash(sdp: &str) -> u16 {
-    let mut h: u32 = 0x811c_9dc5;
-    for b in sdp.bytes() {
-        h ^= b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    let h = (h ^ (h >> 16)) as u16;
-    if h == 0 {
-        1
-    } else {
-        h
-    }
-}
-
-pub fn packet(origin: Ipv4Addr, sdp: &str, deletion: bool) -> Vec<u8> {
-    let mut p = Vec::with_capacity(24 + sdp.len());
-    // V=1, IPv4, announcement or deletion, no encryption or compression.
-    p.push(if deletion { 0x24 } else { 0x20 });
-    p.push(0);
-    p.extend_from_slice(&msg_hash(sdp).to_be_bytes());
-    p.extend_from_slice(&origin.octets());
-    p.extend_from_slice(b"application/sdp\0");
-    p.extend_from_slice(sdp.as_bytes());
-    p
-}
-
-/// Parses a SAP packet: (deletion, origin, sdp).
-pub fn parse(p: &[u8]) -> Option<(bool, Ipv4Addr, String)> {
-    if p.len() < 8 || p[0] >> 5 != 1 || p[0] & 0x10 != 0 {
-        return None;
-    }
-    let auth = p[1] as usize * 4;
-    let origin = Ipv4Addr::new(p[4], p[5], p[6], p[7]);
-    let mut rest = p.get(8 + auth..)?;
-    if rest.starts_with(b"application/sdp\0") {
-        rest = &rest[16..];
-    }
-    Some((
-        p[0] & 0x04 != 0,
-        origin,
-        String::from_utf8_lossy(rest).into_owned(),
-    ))
-}
-
 struct Announced {
     sdp: String,
+    /// Fresh for each SDP, and kept for its deletion.
+    hash: u16,
     last_ms: u64,
 }
 
@@ -94,32 +53,35 @@ impl Announcer {
             .collect();
         for k in gone {
             let a = self.announced.remove(&k).unwrap();
-            self.send(&a.sdp, true);
+            self.send(&a, true);
         }
         for (k, sdp) in active {
             match self.announced.get_mut(k) {
                 Some(a) if a.sdp == *sdp => {
                     if now_ms.saturating_sub(a.last_ms) >= INTERVAL_MS {
                         a.last_ms = now_ms;
-                        let sdp = a.sdp.clone();
-                        self.send(&sdp, false);
+                        let a = &self.announced[k];
+                        self.send(a, false);
                     }
                 }
-                Some(a) => {
-                    let old = std::mem::replace(&mut a.sdp, sdp.clone());
-                    a.last_ms = now_ms;
+                Some(_) => {
+                    let new = Announced {
+                        sdp: sdp.clone(),
+                        hash: ffi::new_sap_hash(),
+                        last_ms: now_ms,
+                    };
+                    let old = self.announced.insert(*k, new).unwrap();
                     self.send(&old, true);
-                    self.send(sdp, false);
+                    self.send(&self.announced[k], false);
                 }
                 None => {
-                    self.announced.insert(
-                        *k,
-                        Announced {
-                            sdp: sdp.clone(),
-                            last_ms: now_ms,
-                        },
-                    );
-                    self.send(sdp, false);
+                    let a = Announced {
+                        sdp: sdp.clone(),
+                        hash: ffi::new_sap_hash(),
+                        last_ms: now_ms,
+                    };
+                    self.send(&a, false);
+                    self.announced.insert(*k, a);
                 }
             }
         }
@@ -130,28 +92,57 @@ impl Announcer {
         self.tick(0, &BTreeMap::new());
     }
 
-    fn send(&self, sdp: &str, deletion: bool) {
-        let _ = self
-            .socket
-            .send_to(&packet(self.origin, sdp, deletion), &self.dest);
+    fn send(&self, a: &Announced, deletion: bool) {
+        let p = ffi::sap_packet(self.origin, a.hash, &a.sdp, deletion);
+        if !p.is_empty() {
+            let _ = self.socket.send_to(&p, &self.dest);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::UdpSocket;
+    use std::time::Duration;
 
+    /// The announcer over loopback: an announcement, a new hash when the SDP
+    /// changes with a deletion of the old one under its own hash, and a
+    /// deletion when the stream goes.
     #[test]
-    fn round_trips() {
-        let p = packet(Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n", false);
-        assert_eq!(p[0], 0x20);
-        assert_eq!(
-            parse(&p),
-            Some((false, Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n".into()))
-        );
-        let d = packet(Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n", true);
-        assert!(parse(&d).unwrap().0);
-        assert_eq!(&p[2..4], &d[2..4]);
-        assert_ne!(msg_hash("a"), msg_hash("b"));
+    fn announces_replaces_and_withdraws() {
+        let rx = UdpSocket::bind("127.0.0.1:0").unwrap();
+        rx.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let net = NetConfig {
+            iface_ip: Ipv4Addr::LOCALHOST,
+            dscp_media: 0,
+        };
+        let mut a = Announcer::new(&net).unwrap();
+        a.dest = SockAddr::from(rx.local_addr().unwrap());
+        let next = || {
+            let mut b = [0u8; 2048];
+            let n = rx.recv(&mut b).unwrap();
+            ffi::sap_parse(&b[..n]).unwrap()
+        };
+        let key = StreamKey {
+            address: Ipv4Addr::new(239, 69, 1, 1),
+            port: 5004,
+        };
+        let mut active = BTreeMap::new();
+        active.insert(key, "v=0\r\ns=A\r\n".to_string());
+        a.tick(0, &active);
+        let (del, h1, origin, sdp) = next();
+        assert!(!del && h1 != 0 && origin == Ipv4Addr::LOCALHOST && sdp.contains("s=A"));
+
+        active.insert(key, "v=0\r\ns=B\r\n".to_string());
+        a.tick(1000, &active);
+        let (del, h, _, sdp) = next();
+        assert!(del && h == h1 && sdp.contains("s=A"));
+        let (del, h2, _, sdp) = next();
+        assert!(!del && h2 != h1 && sdp.contains("s=B"));
+
+        a.withdraw_all();
+        let (del, h, _, sdp) = next();
+        assert!(del && h == h2 && sdp.contains("s=B"));
     }
 }

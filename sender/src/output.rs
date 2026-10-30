@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ffi;
+use crate::ffi::{self, Encoding};
 use crate::timeline::{MediaTime, Timeline};
 
 fn default_port() -> u16 {
@@ -59,6 +59,9 @@ pub struct OutputConfig {
     /// Packet time in microseconds.
     #[serde(default = "default_ptime")]
     pub ptime_us: u32,
+    /// L24, AES67's own, or L16.
+    #[serde(default)]
+    pub encoding: Encoding,
     #[serde(default = "default_pt")]
     pub payload_type: u8,
     #[serde(default = "default_ttl")]
@@ -116,11 +119,13 @@ impl OutputConfig {
                 self.ptime_us
             ));
         }
-        let fits = ffi::max_channels(self.frames_per_packet());
+        let fits = ffi::max_channels(self.encoding, self.frames_per_packet());
         if self.channels == 0 || self.channels as usize > fits {
             return Err(format!(
-                "{} channels do not fit a {} us packet (up to {fits})",
-                self.channels, self.ptime_us
+                "{} channels do not fit a {} us {} packet (up to {fits})",
+                self.channels,
+                self.ptime_us,
+                self.encoding.name()
             ));
         }
         if !(96..=127).contains(&self.payload_type) {
@@ -151,6 +156,7 @@ impl OutputConfig {
         self.channels == o.channels
             && self.sample_rate == o.sample_rate
             && self.ptime_us == o.ptime_us
+            && self.encoding == o.encoding
             && self.payload_type == o.payload_type
             && self.ttl == o.ttl
     }
@@ -324,7 +330,19 @@ mod tests {
             (5004, 2, 48000, 1000)
         );
         assert_eq!(c.channel_map, vec![1, 2]);
+        assert_eq!(c.encoding, Encoding::L24);
         assert_eq!(c.frames_per_packet(), 48);
+        // 15 channels fit a 1 ms L16 packet, but not an L24 one.
+        let mut wide = cfg();
+        wide.channels = 15;
+        wide.channel_map = vec![1, 2];
+        assert!(wide.validate().unwrap_err().contains("L24"));
+        wide.encoding = Encoding::L16;
+        wide.validate().unwrap();
+        assert!(!wide.same_stream_format(&OutputConfig {
+            encoding: Encoding::L24,
+            ..wide.clone()
+        }));
         assert_eq!(c.session(), "Lobby");
         c.validate().unwrap();
     }

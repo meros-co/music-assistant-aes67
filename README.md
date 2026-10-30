@@ -16,8 +16,8 @@ then install **AES67 Sender**. [DOCS.md](DOCS.md) describes its options.
 | Path | What |
 | --- | --- |
 | `config.yaml`, `Dockerfile`, `DOCS.md` | The Home Assistant add-on (this repository is an add-on repository). |
-| `sender/` | The sender, in Rust: PTP-timed RTP L24 transmit, SAP, NMOS IS-04/IS-05, a Sendspin player per output, and a control API. |
-| `vendor/aes67` | [meros-co/aes67](https://github.com/meros-co/aes67), the AES67 packet and SDP library (git submodule). |
+| `sender/` | The sender, in Rust: PTP-timed RTP L24 and L16 transmit, SAP, NMOS IS-04/IS-05, a Sendspin player per output, and a control API. |
+| `vendor/aes67` | [meros-co/aes67](https://github.com/meros-co/aes67), the AES67 packet, SDP and SAP library (git submodule). |
 | `provider/` | A Music Assistant player provider (`aes67`) for the control API, laid out as it goes into the Music Assistant server repository, with its tests. |
 
 ## How audio gets out
@@ -35,8 +35,9 @@ Music Assistant reaches the sender in either of two ways:
 
 Either way, each output has a timeline indexed by the AES67 media clock. One transmit thread
 per stream wakes on PTP packet boundaries (`clock_nanosleep` at the packet's due time),
-mixes the outputs mapped into the stream with their volume ramps, and sends one L24 packet
-stamped with the media time of its first frame (`a=mediaclk:direct=0`).
+mixes the outputs mapped into the stream with their volume ramps, and sends one L24 or L16
+packet stamped with the media time of its first frame (`a=mediaclk:direct=0`). Every stream
+started takes a new SSRC, and every SAP announcement a new message hash, that are never reused.
 
 ## PTP
 

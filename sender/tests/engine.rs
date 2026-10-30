@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use aes67_sender::clock::Clock;
 use aes67_sender::engine::Engine;
-use aes67_sender::ffi;
+use aes67_sender::ffi::{self, Encoding};
 use aes67_sender::output::{OutputConfig, PlayState};
 use aes67_sender::stream::{media_at, NetConfig};
 
@@ -77,6 +77,7 @@ fn config(port: u16, channels: u8, map: Vec<u8>, keep_alive: bool) -> OutputConf
         channels,
         sample_rate: 48000,
         ptime_us: 1000,
+        encoding: Encoding::L24,
         payload_type: 97,
         ttl: 15,
         channel_map: map,
@@ -158,6 +159,38 @@ fn plays_a_wav_into_mapped_channels_on_the_media_clock() {
     std::thread::sleep(Duration::from_millis(50));
     while recv(&rx, 4).is_some() {}
     assert!(recv(&rx, 4).is_none());
+    e.shutdown();
+}
+
+#[test]
+fn plays_l16() {
+    let (rx, port) = receiver();
+    let e = engine();
+    let mut cfg = config(port, 2, vec![1, 2], false);
+    cfg.encoding = Encoding::L16;
+    e.upsert_output("patio", cfg).unwrap();
+    e.set_volume("patio", Some(100), None).unwrap();
+    let sdp = e.sdp_for_output("patio").unwrap();
+    assert!(sdp.contains("a=rtpmap:97 L16/48000/2\r\n"), "{sdp}");
+
+    e.play_url("patio", &serve(wav(48000, 1.0, 0.5, -0.25)), &[])
+        .unwrap();
+    let mut loud = 0;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut buf = [0u8; 1500];
+    while Instant::now() < deadline && loud < 50 {
+        let Ok(n) = rx.recv(&mut buf) else { continue };
+        let payload = &buf[ffi::RTP_HEADER_BYTES..n];
+        assert_eq!(payload.len(), 48 * 2 * 2, "48 frames of two 16-bit samples");
+        let l = i16::from_be_bytes([payload[188], payload[189]]);
+        let r = i16::from_be_bytes([payload[190], payload[191]]);
+        if l > 15_000 {
+            assert!((l as i32 - 16_384).abs() <= 1, "left {l}");
+            assert!((r as i32 + 8_192).abs() <= 1, "right {r}");
+            loud += 1;
+        }
+    }
+    assert!(loud >= 50, "only {loud} packets carried audio");
     e.shutdown();
 }
 

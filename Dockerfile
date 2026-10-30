@@ -10,7 +10,7 @@ COPY vendor vendor
 COPY sender sender
 # Home Assistant may clone this repository without its submodule: fetch
 # libaes67 at the pinned commit when it is missing.
-ARG AES67_COMMIT=92d30d114d9198f91ce3de09194be11912f1e510
+ARG AES67_COMMIT=b2562d6b453d8c08e167eb5fa6c78f3d697d555e
 RUN if [ ! -f vendor/aes67/aes67/src/rtp.c ]; then \
         rm -rf vendor/aes67 \
         && git clone https://github.com/meros-co/aes67.git vendor/aes67 \

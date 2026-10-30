@@ -91,7 +91,9 @@ impl Stream {
         net: NetConfig,
     ) -> std::io::Result<Self> {
         let socket = open_socket(&net, format.ttl, net.dscp_media)?;
-        let ssrc = stream_ssrc(&key, &net);
+        // A new SSRC for every stream started: never another stream's, nor a
+        // previous run's.
+        let ssrc = ffi::new_ssrc();
         let outputs = Arc::new(RwLock::new(outputs));
         let stats = Arc::new(StreamStats::default());
         let stop = Arc::new(AtomicBool::new(false));
@@ -135,22 +137,6 @@ impl Drop for Stream {
             let _ = t.join();
         }
     }
-}
-
-/// A stable SSRC per destination and sender, so a restart looks like the same source.
-pub fn stream_ssrc(key: &StreamKey, net: &NetConfig) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
-    for b in key
-        .address
-        .octets()
-        .iter()
-        .chain(&key.port.to_be_bytes())
-        .chain(&net.iface_ip.octets())
-    {
-        h ^= *b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    h
 }
 
 struct Tx {
@@ -228,7 +214,7 @@ impl Tx {
                     timestamp: ts as u32,
                     ssrc: self.ssrc,
                 };
-                let n = ffi::pack_l24(&mut packet, &h, &pcm, channels);
+                let n = ffi::pack(&mut packet, &h, self.format.encoding, &pcm, channels);
                 seq = seq.wrapping_add(1);
                 if n > 0 && self.socket.send_to(&packet[..n], &dest).is_ok() {
                     self.stats.packets.fetch_add(1, Ordering::Relaxed);
@@ -345,23 +331,5 @@ mod tests {
             }
         }
         assert_eq!(media_at(ptp_of(123_456, 48000), 48000), 123_456);
-    }
-
-    #[test]
-    fn ssrc_is_stable_and_distinct() {
-        let net = NetConfig {
-            iface_ip: Ipv4Addr::new(10, 0, 0, 2),
-            dscp_media: 34,
-        };
-        let a = StreamKey {
-            address: Ipv4Addr::new(239, 69, 1, 1),
-            port: 5004,
-        };
-        let b = StreamKey {
-            address: Ipv4Addr::new(239, 69, 1, 2),
-            port: 5004,
-        };
-        assert_eq!(stream_ssrc(&a, &net), stream_ssrc(&a, &net));
-        assert_ne!(stream_ssrc(&a, &net), stream_ssrc(&b, &net));
     }
 }

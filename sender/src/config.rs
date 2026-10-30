@@ -7,6 +7,7 @@ use std::net::Ipv4Addr;
 
 use serde::Deserialize;
 
+use crate::ffi::Encoding;
 use crate::output::OutputConfig;
 use crate::ptp::PtpRole;
 
@@ -112,6 +113,8 @@ pub struct AddonOutput {
     pub sample_rate: u32,
     #[serde(default = "d_ptime", deserialize_with = "de_num")]
     pub ptime_us: u32,
+    #[serde(default)]
+    pub encoding: Encoding,
     #[serde(default = "d_ttl")]
     pub ttl: u8,
     #[serde(default)]
@@ -187,6 +190,7 @@ impl AddonOptions {
                 channels: o.channels,
                 sample_rate: o.sample_rate,
                 ptime_us: o.ptime_us,
+                encoding: o.encoding,
                 payload_type: 97,
                 ttl: o.ttl,
                 channel_map: parse_map(&o.channel_map)?,
@@ -210,7 +214,7 @@ mod tests {
             r#"{"interface": "", "ptp_role": "leader_if_none", "outputs": [
                 {"name": "Lobby", "address": "239.69.1.10"},
                 {"name": "Lobby", "address": "239.69.1.10", "channels": 2, "channel_map": "1", "sample_rate": "48000", "ptime_us": 1000},
-                {"name": "Café Bar!", "address": "192.168.1.50", "channel_map": "2, 1", "id": "bar"}
+                {"name": "Café Bar!", "address": "192.168.1.50", "channel_map": "2, 1", "id": "bar", "encoding": "L16"}
             ]}"#,
         )
         .unwrap();
@@ -226,6 +230,10 @@ mod tests {
             ["lobby", "lobby-2", "bar"]
         );
         assert_eq!(outs[2].1.channel_map, vec![2, 1]);
+        assert_eq!(
+            (outs[0].1.encoding, outs[2].1.encoding),
+            (Encoding::L24, Encoding::L16)
+        );
         assert_eq!(slug("Café Bar!"), "caf-bar");
         assert!(parse_map("1,x").is_err());
     }

@@ -187,7 +187,7 @@ impl Nmos {
             "id": flow, "label": label, "description": format!("AES67 stream to {key}"), "tags": {},
             "source_id": src, "device_id": self.device_id(), "parents": [],
             "format": "urn:x-nmos:format:audio", "sample_rate": {"numerator": f.sample_rate},
-            "media_type": "audio/L24", "bit_depth": 24,
+            "media_type": format!("audio/{}", f.encoding.name()), "bit_depth": f.encoding.bytes() * 8,
         }));
         let transport = if key.address.is_multicast() {
             "urn:x-nmos:transport:rtp.mcast"

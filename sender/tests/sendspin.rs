@@ -160,6 +160,7 @@ fn music_assistant_plays_through_sendspin() {
         channels: 2,
         sample_rate: 48000,
         ptime_us: 1000,
+        encoding: Default::default(),
         payload_type: 97,
         ttl: 15,
         channel_map: vec![2, 1],
