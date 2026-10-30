@@ -1,0 +1,3 @@
+[submodule "vendor/aes67"]
+	path = vendor/aes67
+	url = https://github.com/meros-co/aes67.git
