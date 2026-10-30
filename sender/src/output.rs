@@ -105,10 +105,16 @@ impl OutputConfig {
             return Err("port 0".into());
         }
         if !SAMPLE_RATES.contains(&self.sample_rate) {
-            return Err(format!("sample rate {} (use 44100, 48000 or 96000)", self.sample_rate));
+            return Err(format!(
+                "sample rate {} (use 44100, 48000 or 96000)",
+                self.sample_rate
+            ));
         }
         if !PTIMES_US.contains(&self.ptime_us) {
-            return Err(format!("packet time {} us (use 125, 250, 333, 1000 or 4000)", self.ptime_us));
+            return Err(format!(
+                "packet time {} us (use 125, 250, 333, 1000 or 4000)",
+                self.ptime_us
+            ));
         }
         let fits = ffi::max_channels(self.frames_per_packet());
         if self.channels == 0 || self.channels as usize > fits {
@@ -118,14 +124,20 @@ impl OutputConfig {
             ));
         }
         if !(96..=127).contains(&self.payload_type) {
-            return Err(format!("payload type {} (use 96 to 127)", self.payload_type));
+            return Err(format!(
+                "payload type {} (use 96 to 127)",
+                self.payload_type
+            ));
         }
         if self.channel_map.is_empty() || self.channel_map.len() > 2 {
             return Err("channel map needs one (mono) or two (left, right) entries".into());
         }
         for (i, &c) in self.channel_map.iter().enumerate() {
             if c == 0 || c > self.channels {
-                return Err(format!("channel map entry {c} is outside the stream's 1..{}", self.channels));
+                return Err(format!(
+                    "channel map entry {c} is outside the stream's 1..{}",
+                    self.channels
+                ));
             }
             if self.channel_map[..i].contains(&c) {
                 return Err(format!("channel map uses channel {c} twice"));
@@ -154,7 +166,7 @@ pub fn adapt_channels(input: &[f32], from: usize, to: usize, out: &mut Vec<f32>)
     }
     for frame in input.chunks_exact(from) {
         if from == 1 {
-            out.extend(std::iter::repeat(frame[0]).take(to));
+            out.extend(std::iter::repeat_n(frame[0], to));
         } else if to == 1 {
             out.push(frame.iter().sum::<f32>() / from as f32);
         } else {
@@ -307,7 +319,10 @@ mod tests {
     #[test]
     fn defaults_are_aes67s() {
         let c = cfg();
-        assert_eq!((c.port, c.channels, c.sample_rate, c.ptime_us), (5004, 2, 48000, 1000));
+        assert_eq!(
+            (c.port, c.channels, c.sample_rate, c.ptime_us),
+            (5004, 2, 48000, 1000)
+        );
         assert_eq!(c.channel_map, vec![1, 2]);
         assert_eq!(c.frames_per_packet(), 48);
         assert_eq!(c.session(), "Lobby");
@@ -327,7 +342,10 @@ mod tests {
         assert!(bad(&|c| c.ptime_us = 2000).contains("packet time"));
         assert!(bad(&|c| c.channels = 100).contains("do not fit"));
         assert!(bad(&|c| c.address = Ipv4Addr::UNSPECIFIED).contains("not a destination"));
-        assert!(serde_json::from_str::<OutputConfig>(r#"{"name":"x","address":"239.1.1.1","chanels":2}"#).is_err());
+        assert!(serde_json::from_str::<OutputConfig>(
+            r#"{"name":"x","address":"239.1.1.1","chanels":2}"#
+        )
+        .is_err());
         let mut c = cfg();
         c.channels = 8;
         c.channel_map = vec![7, 8];

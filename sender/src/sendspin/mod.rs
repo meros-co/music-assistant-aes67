@@ -51,7 +51,12 @@ pub fn path_for(id: &str) -> String {
 
 impl Sendspin {
     pub fn new(cfg: SendspinConfig, engine: Arc<Engine>, shutdown: Arc<AtomicBool>) -> Arc<Self> {
-        Arc::new(Sendspin { cfg, engine, clients: Mutex::new(HashMap::new()), shutdown })
+        Arc::new(Sendspin {
+            cfg,
+            engine,
+            clients: Mutex::new(HashMap::new()),
+            shutdown,
+        })
     }
 
     /// Makes `id` (an engine output) a Sendspin player. Restores its identity and volume.
@@ -61,7 +66,11 @@ impl Sendspin {
             o.set_volume(identity.volume);
             o.set_muted(identity.muted);
         }
-        log::info(&format!("sendspin {id}: client id {}; pairing token {}", identity.client_id(), identity.pairing_token()));
+        log::info(&format!(
+            "sendspin {id}: client id {}; pairing token {}",
+            identity.client_id(),
+            identity.pairing_token()
+        ));
         let ctx = Arc::new(ClientCtx {
             engine: self.engine.clone(),
             output_id: id.to_string(),
@@ -73,7 +82,10 @@ impl Sendspin {
             admission: Admission::default(),
             shutdown: self.shutdown.clone(),
         });
-        self.clients.lock().unwrap().insert(id.to_string(), ctx.clone());
+        self.clients
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), ctx.clone());
         Ok(ctx)
     }
 
@@ -84,7 +96,10 @@ impl Sendspin {
     /// Advertises every output over mDNS.
     pub fn advertise(&self, mdns: &mdns_sd::ServiceDaemon) {
         for (id, ctx) in self.clients.lock().unwrap().iter() {
-            let name = ctx.output().map(|o| o.cfg.name.clone()).unwrap_or_else(|| id.clone());
+            let name = ctx
+                .output()
+                .map(|o| o.cfg.name.clone())
+                .unwrap_or_else(|| id.clone());
             let path = path_for(id);
             let props = [("path", path.as_str()), ("name", name.as_str())];
             let instance = format!("{} {}", self.cfg.hostname, id);

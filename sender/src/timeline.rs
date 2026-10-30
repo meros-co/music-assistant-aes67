@@ -195,7 +195,10 @@ mod tests {
     #[test]
     fn reads_what_was_written_at_its_time() {
         let t = Timeline::new(2, 16);
-        assert_eq!(t.write(100, &[1.0, 2.0, 3.0, 4.0], NO_WAIT), WriteResult::Written);
+        assert_eq!(
+            t.write(100, &[1.0, 2.0, 3.0, 4.0], NO_WAIT),
+            WriteResult::Written
+        );
         let mut out = [9.0; 8];
         assert_eq!(t.read(99, &mut out), 2);
         assert_eq!(out, [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 0.0, 0.0]);
@@ -210,9 +213,15 @@ mod tests {
         let mut out = [0.0; 4];
         t.read(10, &mut out);
         // Playout is at 14: frames 8..13 are all late.
-        assert_eq!(t.write(8, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], NO_WAIT), WriteResult::Late);
+        assert_eq!(
+            t.write(8, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], NO_WAIT),
+            WriteResult::Late
+        );
         assert_eq!(t.stats().1, 6);
-        assert_eq!(t.write(12, &[1.0, 2.0, 3.0, 4.0], NO_WAIT), WriteResult::Written);
+        assert_eq!(
+            t.write(12, &[1.0, 2.0, 3.0, 4.0], NO_WAIT),
+            WriteResult::Written
+        );
         let mut out = [0.0; 4];
         assert_eq!(t.read(14, &mut out), 2);
         assert_eq!(out, [3.0, 4.0, 0.0, 0.0]);

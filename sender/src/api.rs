@@ -60,11 +60,19 @@ pub struct Reply {
 }
 
 fn ok(v: Value) -> Reply {
-    Reply { status: 200, body: v.to_string(), content_type: "application/json" }
+    Reply {
+        status: 200,
+        body: v.to_string(),
+        content_type: "application/json",
+    }
 }
 
 fn err(status: u16, msg: impl Into<String>) -> Reply {
-    Reply { status, body: json!({ "error": msg.into() }).to_string(), content_type: "application/json" }
+    Reply {
+        status,
+        body: json!({ "error": msg.into() }).to_string(),
+        content_type: "application/json",
+    }
 }
 
 fn parse<'a, T: Deserialize<'a>>(body: &'a str) -> Result<T, Reply> {
@@ -160,7 +168,11 @@ impl Api {
                 }
             }
             (Method::Get, ["outputs", id, "sdp"]) => match self.engine.sdp_for_output(id) {
-                Some(sdp) => Reply { status: 200, body: sdp, content_type: "application/sdp" },
+                Some(sdp) => Reply {
+                    status: 200,
+                    body: sdp,
+                    content_type: "application/sdp",
+                },
                 None => err(404, format!("no output '{id}'")),
             },
             _ => err(404, "no such endpoint"),
@@ -174,7 +186,9 @@ impl Api {
             std::thread::spawn(move || {
                 let reply = api.handle_request(&mut req);
                 let ct = Header::from_bytes("Content-Type", reply.content_type).unwrap();
-                let resp = Response::from_string(reply.body).with_status_code(reply.status).with_header(ct);
+                let resp = Response::from_string(reply.body)
+                    .with_status_code(reply.status)
+                    .with_header(ct);
                 if let Err(e) = req.respond(resp) {
                     log::debug(&format!("api reply failed: {e}"));
                 }
@@ -184,7 +198,12 @@ impl Api {
 
     fn handle_request(&self, req: &mut Request) -> Reply {
         let mut body = String::new();
-        if req.as_reader().take(1 << 20).read_to_string(&mut body).is_err() {
+        if req
+            .as_reader()
+            .take(1 << 20)
+            .read_to_string(&mut body)
+            .is_err()
+        {
             return err(400, "body is not UTF-8");
         }
         let auth = req

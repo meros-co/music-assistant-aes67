@@ -47,14 +47,22 @@ pub struct Nmos {
 }
 
 fn tai_version() -> String {
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let d = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
     format!("{}:{}", d.as_secs() + 37, d.subsec_nanos())
 }
 
 impl Nmos {
     pub fn new(engine: Arc<Engine>, cfg: NmosConfig) -> Arc<Self> {
         let ip = engine.net.iface_ip;
-        Arc::new(Nmos { engine, cfg, ip, versions: Mutex::new(HashMap::new()), staged: Mutex::new(HashMap::new()) })
+        Arc::new(Nmos {
+            engine,
+            cfg,
+            ip,
+            versions: Mutex::new(HashMap::new()),
+            staged: Mutex::new(HashMap::new()),
+        })
     }
 
     pub fn id(&self, what: &str) -> Uuid {
@@ -96,7 +104,9 @@ impl Nmos {
     pub fn node(&self) -> Value {
         let status = self.engine.clock_status();
         let clock = match &status.grandmaster {
-            Some(gm) => json!({"name": "clk0", "ref_type": "ptp", "traceable": false, "version": "IEEE1588-2008", "gmid": gm.to_lowercase(), "locked": status.locked}),
+            Some(gm) => {
+                json!({"name": "clk0", "ref_type": "ptp", "traceable": false, "version": "IEEE1588-2008", "gmid": gm.to_lowercase(), "locked": status.locked})
+            }
             None => json!({"name": "clk0", "ref_type": "internal"}),
         };
         let id = self.node_id();
@@ -121,11 +131,19 @@ impl Nmos {
     /// A stream's resources are named after its first output, so they keep
     /// their ids when IS-05 moves the stream to a new destination.
     fn stream_uid(&self, what: &str, ids: &[String]) -> Uuid {
-        self.id(&format!("{what}/{}", ids.first().map(String::as_str).unwrap_or("")))
+        self.id(&format!(
+            "{what}/{}",
+            ids.first().map(String::as_str).unwrap_or("")
+        ))
     }
 
     pub fn device(&self) -> Value {
-        let senders: Vec<Uuid> = self.engine.streams().iter().map(|s| self.stream_uid("sender", &s.2)).collect();
+        let senders: Vec<Uuid> = self
+            .engine
+            .streams()
+            .iter()
+            .map(|s| self.stream_uid("sender", &s.2))
+            .collect();
         let id = self.device_id();
         self.with_version(
             id,
@@ -144,9 +162,22 @@ impl Nmos {
     }
 
     /// Source, flow and sender for one stream.
-    fn stream_resources(&self, key: &StreamKey, ids: &[String], f: &OutputConfig, label: &str, active: bool) -> (Value, Value, Value) {
-        let (src, flow, snd) = (self.stream_uid("source", ids), self.stream_uid("flow", ids), self.stream_uid("sender", ids));
-        let channels: Vec<Value> = (1..=f.channels).map(|c| json!({"label": format!("Channel {c}")})).collect();
+    fn stream_resources(
+        &self,
+        key: &StreamKey,
+        ids: &[String],
+        f: &OutputConfig,
+        label: &str,
+        active: bool,
+    ) -> (Value, Value, Value) {
+        let (src, flow, snd) = (
+            self.stream_uid("source", ids),
+            self.stream_uid("flow", ids),
+            self.stream_uid("sender", ids),
+        );
+        let channels: Vec<Value> = (1..=f.channels)
+            .map(|c| json!({"label": format!("Channel {c}")}))
+            .collect();
         let source = self.with_version(src, json!({
             "id": src, "label": label, "description": format!("AES67 stream to {key}"), "tags": {}, "caps": {},
             "device_id": self.device_id(), "parents": [], "clock_name": "clk0",
@@ -158,7 +189,11 @@ impl Nmos {
             "format": "urn:x-nmos:format:audio", "sample_rate": {"numerator": f.sample_rate},
             "media_type": "audio/L24", "bit_depth": 24,
         }));
-        let transport = if key.address.is_multicast() { "urn:x-nmos:transport:rtp.mcast" } else { "urn:x-nmos:transport:rtp.ucast" };
+        let transport = if key.address.is_multicast() {
+            "urn:x-nmos:transport:rtp.mcast"
+        } else {
+            "urn:x-nmos:transport:rtp.ucast"
+        };
         let sender = self.with_version(snd, json!({
             "id": snd, "label": label, "description": format!("AES67 stream to {key}"), "tags": {},
             "flow_id": flow, "transport": transport, "device_id": self.device_id(),
@@ -173,7 +208,11 @@ impl Nmos {
     pub fn resources(&self) -> Vec<(&'static str, Value)> {
         let mut v = vec![("node", self.node()), ("device", self.device())];
         for (key, f, ids, sdp, sending) in self.engine.streams() {
-            let label = sdp.lines().find_map(|l| l.strip_prefix("s=")).unwrap_or("AES67").to_string();
+            let label = sdp
+                .lines()
+                .find_map(|l| l.strip_prefix("s="))
+                .unwrap_or("AES67")
+                .to_string();
             let (s, fl, sn) = self.stream_resources(&key, &ids, &f, &label, sending);
             v.push(("source", s));
             v.push(("flow", fl));
@@ -182,8 +221,14 @@ impl Nmos {
         v
     }
 
-    fn stream_for_sender(&self, id: &str) -> Option<(StreamKey, OutputConfig, Vec<String>, String, bool)> {
-        self.engine.streams().into_iter().find(|s| self.stream_uid("sender", &s.2).to_string() == id)
+    fn stream_for_sender(
+        &self,
+        id: &str,
+    ) -> Option<(StreamKey, OutputConfig, Vec<String>, String, bool)> {
+        self.engine
+            .streams()
+            .into_iter()
+            .find(|s| self.stream_uid("sender", &s.2).to_string() == id)
     }
 
     fn transport_state(&self, key: &StreamKey, enabled: bool) -> Value {
@@ -199,23 +244,35 @@ impl Nmos {
     }
 
     fn enabled(&self, ids: &[String]) -> bool {
-        ids.iter().filter_map(|i| self.engine.output(i)).any(|o| !o.nmos_disabled.load(Ordering::Relaxed))
+        ids.iter()
+            .filter_map(|i| self.engine.output(i))
+            .any(|o| !o.nmos_disabled.load(Ordering::Relaxed))
     }
 
     /// Applies a staged IS-05 change: enable/disable, and a new destination.
-    fn activate(&self, key: StreamKey, ids: &[String], staged: &Value) -> Result<StreamKey, String> {
+    fn activate(
+        &self,
+        key: StreamKey,
+        ids: &[String],
+        staged: &Value,
+    ) -> Result<StreamKey, String> {
         let enable = staged["master_enable"].as_bool();
         let tp = &staged["transport_params"][0];
         let mut new_key = key;
         if let Some(ip) = tp["destination_ip"].as_str() {
-            new_key.address = ip.parse().map_err(|_| format!("destination_ip {ip} is not IPv4"))?;
+            new_key.address = ip
+                .parse()
+                .map_err(|_| format!("destination_ip {ip} is not IPv4"))?;
         }
         if let Some(p) = tp["destination_port"].as_u64() {
-            new_key.port = u16::try_from(p).map_err(|_| "destination_port out of range".to_string())?;
+            new_key.port =
+                u16::try_from(p).map_err(|_| "destination_port out of range".to_string())?;
         }
         if new_key != key {
             for id in ids {
-                let Some(o) = self.engine.output(id) else { continue };
+                let Some(o) = self.engine.output(id) else {
+                    continue;
+                };
                 let mut c = o.cfg.clone();
                 c.address = new_key.address;
                 c.port = new_key.port;
@@ -233,17 +290,41 @@ impl Nmos {
         Ok(new_key)
     }
 
-    pub fn handle(self: &Arc<Self>, method: &Method, url: &str, body: &str) -> (u16, String, &'static str) {
+    pub fn handle(
+        self: &Arc<Self>,
+        method: &Method,
+        url: &str,
+        body: &str,
+    ) -> (u16, String, &'static str) {
         let path = url.split('?').next().unwrap_or("").trim_end_matches('/');
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         let j = |v: Value| (200, v.to_string(), "application/json");
-        let not_found = || (404, json!({"code": 404, "error": "not found", "debug": null}).to_string(), "application/json");
-        let list = |t: &str| -> Vec<Value> { self.resources().into_iter().filter(|r| r.0 == t).map(|r| r.1).collect() };
+        let not_found = || {
+            (
+                404,
+                json!({"code": 404, "error": "not found", "debug": null}).to_string(),
+                "application/json",
+            )
+        };
+        let list = |t: &str| -> Vec<Value> {
+            self.resources()
+                .into_iter()
+                .filter(|r| r.0 == t)
+                .map(|r| r.1)
+                .collect()
+        };
         match (method, parts.as_slice()) {
             (Method::Get, [""]) => j(json!(["x-nmos/"])),
             (Method::Get, ["x-nmos"]) => j(json!(["node/", "connection/"])),
             (Method::Get, ["x-nmos", "node"]) => j(json!(["v1.3/"])),
-            (Method::Get, ["x-nmos", "node", "v1.3"]) => j(json!(["self/", "devices/", "sources/", "flows/", "senders/", "receivers/"])),
+            (Method::Get, ["x-nmos", "node", "v1.3"]) => j(json!([
+                "self/",
+                "devices/",
+                "sources/",
+                "flows/",
+                "senders/",
+                "receivers/"
+            ])),
             (Method::Get, ["x-nmos", "node", "v1.3", "self"]) => j(self.node()),
             (Method::Get, ["x-nmos", "node", "v1.3", "receivers"]) => j(json!([])),
             (Method::Get, ["x-nmos", "node", "v1.3", kind]) => match kind.strip_suffix('s') {
@@ -252,22 +333,41 @@ impl Nmos {
             },
             (Method::Get, ["x-nmos", "node", "v1.3", kind, id]) => {
                 let t = kind.strip_suffix('s').unwrap_or("");
-                list(t).into_iter().find(|r| r["id"] == *id).map(j).unwrap_or_else(not_found)
+                list(t)
+                    .into_iter()
+                    .find(|r| r["id"] == *id)
+                    .map(j)
+                    .unwrap_or_else(not_found)
             }
             (Method::Get, ["x-nmos", "connection"]) => j(json!(["v1.1/"])),
             (Method::Get, ["x-nmos", "connection", "v1.1"]) => j(json!(["single/", "bulk/"])),
-            (Method::Get, ["x-nmos", "connection", "v1.1", "single"]) => j(json!(["senders/", "receivers/"])),
+            (Method::Get, ["x-nmos", "connection", "v1.1", "single"]) => {
+                j(json!(["senders/", "receivers/"]))
+            }
             (Method::Get, ["x-nmos", "connection", "v1.1", "single", "receivers"]) => j(json!([])),
             (Method::Get, ["x-nmos", "connection", "v1.1", "single", "senders"]) => {
-                let ids: Vec<String> = self.engine.streams().iter().map(|s| format!("{}/", self.stream_uid("sender", &s.2))).collect();
+                let ids: Vec<String> = self
+                    .engine
+                    .streams()
+                    .iter()
+                    .map(|s| format!("{}/", self.stream_uid("sender", &s.2)))
+                    .collect();
                 j(json!(ids))
             }
             (_, ["x-nmos", "connection", "v1.1", "single", "senders", id, rest @ ..]) => {
-                let Some((key, _f, ids, sdp, _)) = self.stream_for_sender(id) else { return not_found() };
+                let Some((key, _f, ids, sdp, _)) = self.stream_for_sender(id) else {
+                    return not_found();
+                };
                 let uid: Uuid = id.parse().unwrap_or_default();
                 let enabled = self.enabled(&ids);
                 match (method, rest) {
-                    (Method::Get, []) => j(json!(["constraints/", "staged/", "active/", "transportfile/", "transporttype/"])),
+                    (Method::Get, []) => j(json!([
+                        "constraints/",
+                        "staged/",
+                        "active/",
+                        "transportfile/",
+                        "transporttype/"
+                    ])),
                     (Method::Get, ["transporttype"]) => j(json!("urn:x-nmos:transport:rtp")),
                     (Method::Get, ["constraints"]) => j(json!([{
                         "source_ip": {"enum": [self.ip.to_string()]}, "destination_ip": {}, "source_port": {},
@@ -286,20 +386,44 @@ impl Nmos {
                         }
                     }
                     (Method::Patch, ["staged"]) => self.patch_staged(uid, key, &ids, enabled, body),
-                    _ => (405, json!({"code": 405, "error": "method not allowed", "debug": null}).to_string(), "application/json"),
+                    _ => (
+                        405,
+                        json!({"code": 405, "error": "method not allowed", "debug": null})
+                            .to_string(),
+                        "application/json",
+                    ),
                 }
             }
             _ => not_found(),
         }
     }
 
-    fn patch_staged(self: &Arc<Self>, uid: Uuid, key: StreamKey, ids: &[String], enabled: bool, body: &str) -> (u16, String, &'static str) {
-        let bad = |m: &str| (400, json!({"code": 400, "error": m, "debug": null}).to_string(), "application/json");
+    fn patch_staged(
+        self: &Arc<Self>,
+        uid: Uuid,
+        key: StreamKey,
+        ids: &[String],
+        enabled: bool,
+        body: &str,
+    ) -> (u16, String, &'static str) {
+        let bad = |m: &str| {
+            (
+                400,
+                json!({"code": 400, "error": m, "debug": null}).to_string(),
+                "application/json",
+            )
+        };
         let patch: Value = match serde_json::from_str(body) {
             Ok(v @ Value::Object(_)) => v,
             _ => return bad("body must be a JSON object"),
         };
-        let mut staged = self.staged.lock().unwrap().get(&uid).cloned().unwrap_or_else(|| self.transport_state(&key, enabled));
+        let mut staged = self
+            .staged
+            .lock()
+            .unwrap()
+            .get(&uid)
+            .cloned()
+            .unwrap_or_else(|| self.transport_state(&key, enabled));
         if let Some(e) = patch.get("master_enable") {
             staged["master_enable"] = e.clone();
         }
@@ -309,7 +433,15 @@ impl Nmos {
         if let Some(Value::Array(tps)) = patch.get("transport_params") {
             if let Some(Value::Object(tp)) = tps.first() {
                 for (k, v) in tp {
-                    if !["source_ip", "destination_ip", "source_port", "destination_port", "rtp_enabled"].contains(&k.as_str()) {
+                    if ![
+                        "source_ip",
+                        "destination_ip",
+                        "source_port",
+                        "destination_port",
+                        "rtp_enabled",
+                    ]
+                    .contains(&k.as_str())
+                    {
                         return bad(&format!("unknown transport parameter {k}"));
                     }
                     staged["transport_params"][0][k] = v.clone();
@@ -333,8 +465,12 @@ impl Nmos {
                 Err(e) => bad(&e),
             },
             Some(m @ ("activate_scheduled_relative" | "activate_scheduled_absolute")) => {
-                let Some(t) = patch["activation"]["requested_time"].as_str() else { return bad("requested_time is required") };
-                let Some(at) = parse_tai(t) else { return bad("requested_time is not seconds:nanoseconds") };
+                let Some(t) = patch["activation"]["requested_time"].as_str() else {
+                    return bad("requested_time is required");
+                };
+                let Some(at) = parse_tai(t) else {
+                    return bad("requested_time is not seconds:nanoseconds");
+                };
                 let delay = if m.ends_with("relative") {
                     at
                 } else {
@@ -352,7 +488,8 @@ impl Nmos {
                     me.staged.lock().unwrap().remove(&uid);
                 });
                 let mut out = staged;
-                out["activation"] = json!({"mode": m, "requested_time": t, "activation_time": null});
+                out["activation"] =
+                    json!({"mode": m, "requested_time": t, "activation_time": null});
                 (202, out.to_string(), "application/json")
             }
             Some(other) => bad(&format!("activation mode {other} is not supported")),
@@ -365,7 +502,7 @@ impl Nmos {
             std::thread::spawn(move || {
                 let mut body = String::new();
                 let _ = std::io::Read::read_to_string(&mut req.as_reader(), &mut body);
-                let (status, text, ct) = me.handle(&req.method().clone(), &req.url().to_string(), &body);
+                let (status, text, ct) = me.handle(&req.method().clone(), req.url(), &body);
                 let resp = Response::from_string(text)
                     .with_status_code(status)
                     .with_header(Header::from_bytes("Content-Type", ct).unwrap())
@@ -381,7 +518,9 @@ impl Nmos {
         let browse_old = mdns.browse("_nmos-registration._tcp.local.").ok();
         let mut registries: BTreeMap<String, (u32, String)> = BTreeMap::new();
         let mut advertised = false;
-        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(3)).build();
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(3))
+            .build();
         let mut current: Option<String> = None;
         let mut registered: HashMap<Uuid, String> = HashMap::new();
         let mut last_heartbeat = Instant::now() - Duration::from_secs(10);
@@ -396,9 +535,16 @@ impl Nmos {
                             if proto != "http" || !vers.split(',').any(|v| v == "v1.3") {
                                 continue;
                             }
-                            let pri: u32 = props.get_property_val_str("pri").and_then(|p| p.parse().ok()).unwrap_or(100);
+                            let pri: u32 = props
+                                .get_property_val_str("pri")
+                                .and_then(|p| p.parse().ok())
+                                .unwrap_or(100);
                             if let Some(addr) = info.get_addresses_v4().iter().next() {
-                                let url = format!("http://{}:{}/x-nmos/registration/v1.3", addr, info.get_port());
+                                let url = format!(
+                                    "http://{}:{}/x-nmos/registration/v1.3",
+                                    addr,
+                                    info.get_port()
+                                );
                                 registries.insert(info.get_fullname().to_string(), (pri, url));
                             }
                         }
@@ -423,7 +569,9 @@ impl Nmos {
                         let _ = mdns.unregister(&self.node_service_name());
                         advertised = false;
                     }
-                    if let Err(e) = self.sync_registry(&agent, reg, &mut registered, &mut last_heartbeat) {
+                    if let Err(e) =
+                        self.sync_registry(&agent, reg, &mut registered, &mut last_heartbeat)
+                    {
                         log::debug(&format!("NMOS registry {reg}: {e}"));
                         registered.clear();
                     }
@@ -439,11 +587,18 @@ impl Nmos {
     }
 
     fn node_service_name(&self) -> String {
-        format!("{}._nmos-node._tcp.local.", self.cfg.label.replace('.', "-"))
+        format!(
+            "{}._nmos-node._tcp.local.",
+            self.cfg.label.replace('.', "-")
+        )
     }
 
     fn advertise(&self, mdns: &mdns_sd::ServiceDaemon) -> Result<(), mdns_sd::Error> {
-        let props = [("api_proto", "http"), ("api_ver", "v1.3"), ("api_auth", "false")];
+        let props = [
+            ("api_proto", "http"),
+            ("api_ver", "v1.3"),
+            ("api_auth", "false"),
+        ];
         let info = mdns_sd::ServiceInfo::new(
             "_nmos-node._tcp.local.",
             &self.cfg.label.replace('.', "-"),
@@ -465,7 +620,10 @@ impl Nmos {
         let resources = self.resources();
         // Register what is new or changed, in dependency order.
         for (kind, body) in &resources {
-            let id: Uuid = body["id"].as_str().and_then(|s| s.parse().ok()).unwrap_or_default();
+            let id: Uuid = body["id"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_default();
             let ver = body["version"].as_str().unwrap_or("").to_string();
             if registered.get(&id) == Some(&ver) {
                 continue;
@@ -482,8 +640,10 @@ impl Nmos {
             }
         }
         // Withdraw what no longer exists (never the node, which goes last at shutdown).
-        let live: std::collections::HashSet<Uuid> =
-            resources.iter().filter_map(|(_, b)| b["id"].as_str().and_then(|s| s.parse().ok())).collect();
+        let live: std::collections::HashSet<Uuid> = resources
+            .iter()
+            .filter_map(|(_, b)| b["id"].as_str().and_then(|s| s.parse().ok()))
+            .collect();
         let stale: Vec<(Uuid, &'static str)> = registered
             .keys()
             .filter(|id| !live.contains(id))
@@ -497,7 +657,10 @@ impl Nmos {
         }
         if last_heartbeat.elapsed() >= Duration::from_secs(5) {
             *last_heartbeat = Instant::now();
-            match agent.post(&format!("{reg}/health/nodes/{}", self.node_id())).call() {
+            match agent
+                .post(&format!("{reg}/health/nodes/{}", self.node_id()))
+                .call()
+            {
                 Ok(_) => {}
                 Err(ureq::Error::Status(404, _)) => {
                     registered.clear();
@@ -522,17 +685,28 @@ mod tests {
     use crate::stream::NetConfig;
 
     fn setup() -> Arc<Nmos> {
-        let e = Engine::new(Arc::new(Clock::new()), NetConfig { iface_ip: Ipv4Addr::LOCALHOST, dscp_media: 34 });
-        let cfg: OutputConfig = serde_json::from_str(r#"{"name":"Lobby","address":"239.69.1.10","keep_alive":false}"#).unwrap();
+        let e = Engine::new(
+            Arc::new(Clock::new()),
+            NetConfig {
+                iface_ip: Ipv4Addr::LOCALHOST,
+                dscp_media: 34,
+            },
+        );
+        let cfg: OutputConfig =
+            serde_json::from_str(r#"{"name":"Lobby","address":"239.69.1.10","keep_alive":false}"#)
+                .unwrap();
         e.upsert_output("lobby", cfg).unwrap();
-        Nmos::new(e, NmosConfig {
-            label: "ma-aes67".into(),
-            hostname: "homeassistant".into(),
-            port: 8891,
-            interface: "eth0".into(),
-            mac: Some("02-42-ac-11-00-02".into()),
-            seed: "test".into(),
-        })
+        Nmos::new(
+            e,
+            NmosConfig {
+                label: "ma-aes67".into(),
+                hostname: "homeassistant".into(),
+                port: 8891,
+                interface: "eth0".into(),
+                mac: Some("02-42-ac-11-00-02".into()),
+                seed: "test".into(),
+            },
+        )
     }
 
     #[test]
@@ -559,7 +733,11 @@ mod tests {
         let id = s["id"].as_str().unwrap();
         let (st, _, _) = n.handle(&Method::Get, &format!("/x-nmos/node/v1.3/senders/{id}"), "");
         assert_eq!(st, 200);
-        let (st, sdp, ct) = n.handle(&Method::Get, &format!("/x-nmos/connection/v1.1/single/senders/{id}/transportfile"), "");
+        let (st, sdp, ct) = n.handle(
+            &Method::Get,
+            &format!("/x-nmos/connection/v1.1/single/senders/{id}/transportfile"),
+            "",
+        );
         assert_eq!((st, ct), (200, "application/sdp"));
         assert!(sdp.contains("239.69.1.10"));
     }
@@ -567,12 +745,22 @@ mod tests {
     #[test]
     fn is05_disables_and_moves_a_sender() {
         let n = setup();
-        let id = n.resources().iter().find(|r| r.0 == "sender").unwrap().1["id"].as_str().unwrap().to_string();
+        let id = n.resources().iter().find(|r| r.0 == "sender").unwrap().1["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let base = format!("/x-nmos/connection/v1.1/single/senders/{id}");
-        let (st, _, _) = n.handle(&Method::Patch, &format!("{base}/staged"), r#"{"master_enable": false, "activation": {"mode": "activate_immediate"}}"#);
+        let (st, _, _) = n.handle(
+            &Method::Patch,
+            &format!("{base}/staged"),
+            r#"{"master_enable": false, "activation": {"mode": "activate_immediate"}}"#,
+        );
         assert_eq!(st, 200);
         let (_, active, _) = n.handle(&Method::Get, &format!("{base}/active"), "");
-        assert_eq!(serde_json::from_str::<Value>(&active).unwrap()["master_enable"], false);
+        assert_eq!(
+            serde_json::from_str::<Value>(&active).unwrap()["master_enable"],
+            false
+        );
         let (st, _, _) = n.handle(&Method::Get, &format!("{base}/transportfile"), "");
         assert_eq!(st, 404);
 
@@ -583,8 +771,15 @@ mod tests {
         );
         assert_eq!(st, 200);
         let o = n.engine.output("lobby").unwrap();
-        assert_eq!((o.cfg.address, o.cfg.port), (Ipv4Addr::new(239, 69, 1, 20), 5006));
-        let (st, _, _) = n.handle(&Method::Patch, &format!("{base}/staged"), r#"{"transport_params": [{"bogus": 1}]}"#);
+        assert_eq!(
+            (o.cfg.address, o.cfg.port),
+            (Ipv4Addr::new(239, 69, 1, 20), 5006)
+        );
+        let (st, _, _) = n.handle(
+            &Method::Patch,
+            &format!("{base}/staged"),
+            r#"{"transport_params": [{"bogus": 1}]}"#,
+        );
         assert_eq!(st, 400);
         n.engine.shutdown();
     }

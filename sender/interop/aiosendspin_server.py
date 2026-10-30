@@ -3,7 +3,7 @@ Interop check: drive a running AES67 Sender with aiosendspin's own server.
 
 aiosendspin is the Sendspin server library Music Assistant uses. This script dials
 one output's Sendspin endpoint, approves it as Music Assistant does for an unpaired
-guest player, streams two seconds of a 1 kHz tone, and listens for the output's AES67
+guest player, streams two seconds of a 1 kHz tone at half scale, and listens for the output's AES67
 stream to confirm the tone arrives.
 
     python aiosendspin_server.py ws://<sender>:8928/sendspin/<id> <group> <port>
@@ -20,6 +20,7 @@ import struct
 import sys
 import threading
 
+from aiohttp import ClientSession
 from aiosendspin.noise import Identity, InMemoryServerPairingStore
 from aiosendspin.server import AudioFormat, SendspinServer
 
@@ -68,8 +69,13 @@ async def main(url: str, group: str, port: int) -> int:
     listener.start()
 
     loop = asyncio.get_running_loop()
+    session = ClientSession()
     server = SendspinServer(
-        loop, Identity.generate(), "Interop check", pairing_store=InMemoryServerPairingStore()
+        loop,
+        Identity.generate(),
+        "Interop check",
+        client_session=session,
+        pairing_store=InMemoryServerPairingStore(),
     )
     connected: asyncio.Future[str] = loop.create_future()
 
@@ -99,8 +105,11 @@ async def main(url: str, group: str, port: int) -> int:
     await asyncio.sleep(0.5)
     stop.set()
     listener.join()
+    await session.close()
     print(f"AES67 packets: {stats['packets']}, with the tone: {stats['loud']}, peak {stats['peak']}")
-    ok = stats["loud"] >= 1500 and 3_000_000 < stats["peak"] < 4_300_000
+    # half scale at the sender's default volume, 50: -30 dB
+    want = 0.5 * 8_388_607 * 10 ** (-30 / 20)
+    ok = stats["loud"] >= 1900 and abs(stats["peak"] - want) < want * 0.05
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 

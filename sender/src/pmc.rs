@@ -83,7 +83,9 @@ pub fn decode(msg: &[u8]) -> Result<Response<'_>, DecodeError> {
     let tlv_type = u16::from_be_bytes([msg[48], msg[49]]);
     let tlv_len = u16::from_be_bytes([msg[50], msg[51]]) as usize;
     if tlv_type == TLV_MANAGEMENT_ERROR_STATUS {
-        return Err(DecodeError::ManagementError(u16::from_be_bytes([msg[52], msg[53]])));
+        return Err(DecodeError::ManagementError(u16::from_be_bytes([
+            msg[52], msg[53],
+        ])));
     }
     if tlv_type != TLV_MANAGEMENT || tlv_len < 2 || msg.len() < 52 + tlv_len {
         return Err(DecodeError::Short);
@@ -187,7 +189,13 @@ pub mod client {
             sock.set_read_timeout(Some(Duration::from_millis(500)))?;
             let mut source = [0u8; 10];
             source[..4].copy_from_slice(&std::process::id().to_be_bytes());
-            Ok(Pmc { sock, local, domain, sequence: 0, source })
+            Ok(Pmc {
+                sock,
+                local,
+                domain,
+                sequence: 0,
+                source,
+            })
         }
 
         /// GETs one management id and returns its data field.
@@ -199,7 +207,9 @@ pub mod client {
             loop {
                 let n = self.sock.recv(&mut buf)?;
                 match decode(&buf[..n]) {
-                    Ok(r) if r.id == id && r.sequence == self.sequence => return Ok(r.data.to_vec()),
+                    Ok(r) if r.id == id && r.sequence == self.sequence => {
+                        return Ok(r.data.to_vec())
+                    }
                     Ok(_) => continue,
                     Err(DecodeError::ManagementError(code)) => {
                         return Err(io::Error::other(format!("ptp4l management error {code}")))

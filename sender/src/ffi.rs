@@ -102,7 +102,7 @@ pub fn media_clock_ts(ptp_ns: u64, rate: u32) -> u32 {
 
 /// Packs a header and right-justified 24-bit samples into `packet`; the length, or 0.
 pub fn pack_l24(packet: &mut [u8], h: &RtpHeader, interleaved: &[i32], channels: usize) -> usize {
-    if channels == 0 || interleaved.len() % channels != 0 {
+    if channels == 0 || !interleaved.len().is_multiple_of(channels) {
         return 0;
     }
     let frames = interleaved.len() / channels;
@@ -176,17 +176,29 @@ pub fn sdp_parse(text: &str) -> Result<ParsedSdp, String> {
     let mut out: ParsedSdp = unsafe { std::mem::zeroed() };
     let mut err = [0 as c_char; 256];
     let ok = unsafe {
-        aes67_sdp_parse(text.as_ptr() as *const c_char, text.len(), &mut out, err.as_mut_ptr(), err.len())
+        aes67_sdp_parse(
+            text.as_ptr() as *const c_char,
+            text.len(),
+            &mut out,
+            err.as_mut_ptr(),
+            err.len(),
+        )
     };
     if ok {
         Ok(out)
     } else {
-        Err(unsafe { CStr::from_ptr(err.as_ptr()) }.to_string_lossy().into_owned())
+        Err(unsafe { CStr::from_ptr(err.as_ptr()) }
+            .to_string_lossy()
+            .into_owned())
     }
 }
 
 pub fn c_str(field: &[c_char]) -> String {
-    let bytes: Vec<u8> = field.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+    let bytes: Vec<u8> = field
+        .iter()
+        .take_while(|&&c| c != 0)
+        .map(|&c| c as u8)
+        .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
@@ -200,12 +212,21 @@ mod tests {
         assert_eq!(media_clock_ts(1_000_000_000, 48000), 48000);
         assert_eq!(media_clock_ts(1_500_000_000, 48000), 72000);
         let big = 1_800_000_000u64 * 1_000_000_000;
-        assert_eq!(media_clock_ts(big, 48000), (1_800_000_000u64 * 48000) as u32);
+        assert_eq!(
+            media_clock_ts(big, 48000),
+            (1_800_000_000u64 * 48000) as u32
+        );
     }
 
     #[test]
     fn packs_and_parses_a_packet() {
-        let h = RtpHeader { payload_type: 97, marker: false, sequence: 7, timestamp: 1234, ssrc: 0xdead };
+        let h = RtpHeader {
+            payload_type: 97,
+            marker: false,
+            sequence: 7,
+            timestamp: 1234,
+            ssrc: 0xdead,
+        };
         let samples = [0x123456, -0x123456, 0x7fffff, -0x800000];
         let mut pkt = [0u8; 1500];
         let n = pack_l24(&mut pkt, &h, &samples, 2);

@@ -18,7 +18,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Local realtime in ns since the Unix epoch.
 pub fn realtime_ns() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as i64).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as i64)
+        .unwrap_or(0)
 }
 
 /// TAI - UTC since 2017, what a clock with no better information assumes.
@@ -66,7 +69,10 @@ pub struct ClockStatus {
 }
 
 pub fn format_clock_identity(id: &[u8; 8]) -> String {
-    id.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join("-")
+    id.iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -133,7 +139,8 @@ impl OffsetFilter {
             return FilterEvent::Duplicate;
         }
         if let Some(fit) = self.fit {
-            if self.window.len() >= 4 && (offset - fit.offset_at(t)).abs() > self.step_threshold_ns {
+            if self.window.len() >= 4 && (offset - fit.offset_at(t)).abs() > self.step_threshold_ns
+            {
                 self.pending_steps += 1;
                 if self.pending_steps < 3 {
                     return FilterEvent::Outlier;
@@ -163,7 +170,11 @@ impl OffsetFilter {
             return;
         }
         let t_ref = self.window[n - 1].0;
-        let xs: Vec<f64> = self.window.iter().map(|&(t, _)| (t - t_ref) as f64).collect();
+        let xs: Vec<f64> = self
+            .window
+            .iter()
+            .map(|&(t, _)| (t - t_ref) as f64)
+            .collect();
         let ys: Vec<f64> = self.window.iter().map(|&(_, o)| o).collect();
         let mx = xs.iter().sum::<f64>() / n as f64;
         let my = ys.iter().sum::<f64>() / n as f64;
@@ -171,10 +182,22 @@ impl OffsetFilter {
         let sxy: f64 = xs.iter().zip(&ys).map(|(x, y)| (x - mx) * (y - my)).sum();
         // Under two seconds of history the slope is mostly noise.
         let span = xs.first().map(|x| -x).unwrap_or(0.0);
-        let rate = if n >= 3 && sxx > 0.0 && span >= 2e9 { sxy / sxx } else { 0.0 };
+        let rate = if n >= 3 && sxx > 0.0 && span >= 2e9 {
+            sxy / sxx
+        } else {
+            0.0
+        };
         let offset = my - rate * mx;
-        let fit = Fit { offset, rate, t_ref };
-        let sq: f64 = self.window.iter().map(|&(t, o)| (o - fit.offset_at(t)).powi(2)).sum();
+        let fit = Fit {
+            offset,
+            rate,
+            t_ref,
+        };
+        let sq: f64 = self
+            .window
+            .iter()
+            .map(|&(t, o)| (o - fit.offset_at(t)).powi(2))
+            .sum();
         self.rms = (sq / n as f64).sqrt();
         self.fit = Some(fit);
     }
@@ -370,7 +393,11 @@ mod tests {
         // Prediction a second past the last sample.
         let t = t0 + 40 * 250_000_000 + 1_000_000_000;
         let want = t + 37_000_000_000 - offset(t);
-        assert!((clock.to_ptp(t) - want).abs() < 30_000, "error {}", clock.to_ptp(t) - want);
+        assert!(
+            (clock.to_ptp(t) - want).abs() < 30_000,
+            "error {}",
+            clock.to_ptp(t) - want
+        );
         let p = clock.to_ptp(t);
         assert!((clock.to_realtime(p) - t).abs() <= 1);
     }

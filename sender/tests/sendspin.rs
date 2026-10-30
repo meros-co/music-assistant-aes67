@@ -66,7 +66,9 @@ impl FakeServer {
     fn until(&mut self, kind: &str, clock: &Clock) -> Value {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
-            let Some(m) = self.recv(Duration::from_millis(500)) else { continue };
+            let Some(m) = self.recv(Duration::from_millis(500)) else {
+                continue;
+            };
             if m["type"] == "client/time" {
                 let now = server_now(clock);
                 self.send(json!({"type": "server/time", "payload": {
@@ -84,7 +86,8 @@ impl FakeServer {
 
 fn connect(port: u16, id: &str) -> FakeServer {
     let tcp = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    let (mut ws, _) = tungstenite::client::client(format!("ws://127.0.0.1:{port}/sendspin/{id}"), tcp).unwrap();
+    let (mut ws, _) =
+        tungstenite::client::client(format!("ws://127.0.0.1:{port}/sendspin/{id}"), tcp).unwrap();
     let init = match ws.read().unwrap() {
         Message::Text(t) => t.to_string(),
         m => panic!("{m:?}"),
@@ -93,22 +96,34 @@ fn connect(port: u16, id: &str) -> FakeServer {
     assert_eq!(ci["type"], "client/init");
     assert_eq!(ci["payload"]["suite"], "25519_ChaChaPoly_SHA256");
     let client_pub = from_b64url(ci["payload"]["client_id"].as_str().unwrap()).unwrap();
-    let kp = snow::Builder::new(noise_params()).generate_keypair().unwrap();
-    let si = json!({"type": "server/init", "payload": {"server_id": b64url(&kp.public), "version": 1}}).to_string();
+    let kp = snow::Builder::new(noise_params())
+        .generate_keypair()
+        .unwrap();
+    let si =
+        json!({"type": "server/init", "payload": {"server_id": b64url(&kp.public), "version": 1}})
+            .to_string();
     ws.send(Message::text(si.clone())).unwrap();
     let mut prologue = init.into_bytes();
     prologue.extend_from_slice(si.as_bytes());
     let psk = sentinel_psk();
     let mut hs = snow::Builder::new(noise_params())
-        .local_private_key(&kp.private).unwrap()
-        .remote_public_key(&client_pub).unwrap()
-        .prologue(&prologue).unwrap()
-        .psk(2, &psk).unwrap()
-        .build_initiator().unwrap();
+        .local_private_key(&kp.private)
+        .unwrap()
+        .remote_public_key(&client_pub)
+        .unwrap()
+        .prologue(&prologue)
+        .unwrap()
+        .psk(2, &psk)
+        .unwrap()
+        .build_initiator()
+        .unwrap();
     let payload = json!({"psk_id": psk_id(&psk), "psk_category": "sn"}).to_string();
     let mut m1 = vec![0u8; 512];
     let n = hs.write_message(payload.as_bytes(), &mut m1).unwrap();
-    ws.send(Message::text(json!({"type": "noise/handshake", "payload": {"data": b64url(&m1[..n])}}).to_string())).unwrap();
+    ws.send(Message::text(
+        json!({"type": "noise/handshake", "payload": {"data": b64url(&m1[..n])}}).to_string(),
+    ))
+    .unwrap();
     let m2: Value = match ws.read().unwrap() {
         Message::Text(t) => serde_json::from_str(&t).unwrap(),
         m => panic!("{m:?}"),
@@ -117,16 +132,26 @@ fn connect(port: u16, id: &str) -> FakeServer {
     let mut out = vec![0u8; 64];
     let k = hs.read_message(&data, &mut out).unwrap();
     assert_eq!(&out[..k], b"{}");
-    FakeServer { ws, t: hs.into_transport_mode().unwrap() }
+    FakeServer {
+        ws,
+        t: hs.into_transport_mode().unwrap(),
+    }
 }
 
 #[test]
 fn music_assistant_plays_through_sendspin() {
     let rx = UdpSocket::bind("127.0.0.1:0").unwrap();
-    rx.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
+    rx.set_read_timeout(Some(Duration::from_millis(100)))
+        .unwrap();
     let rtp_port = rx.local_addr().unwrap().port();
     let clock = Arc::new(Clock::new());
-    let engine = Engine::new(clock.clone(), NetConfig { iface_ip: Ipv4Addr::UNSPECIFIED, dscp_media: 34 });
+    let engine = Engine::new(
+        clock.clone(),
+        NetConfig {
+            iface_ip: Ipv4Addr::UNSPECIFIED,
+            dscp_media: 34,
+        },
+    );
     let cfg = OutputConfig {
         name: "Lobby".into(),
         session_name: String::new(),
@@ -144,7 +169,14 @@ fn music_assistant_plays_through_sendspin() {
     let data_dir = std::env::temp_dir().join(format!("sendspin-it-{}", std::process::id()));
     let latency_us = 3000;
     let ss = Sendspin::new(
-        SendspinConfig { port: 0, data_dir: data_dir.clone(), hostname: "test".into(), ip: Ipv4Addr::LOCALHOST, mac: None, receiver_latency_us: latency_us },
+        SendspinConfig {
+            port: 0,
+            data_dir: data_dir.clone(),
+            hostname: "test".into(),
+            ip: Ipv4Addr::LOCALHOST,
+            mac: None,
+            receiver_latency_us: latency_us,
+        },
         engine.clone(),
         Arc::new(AtomicBool::new(false)),
     );
@@ -166,10 +198,16 @@ fn music_assistant_plays_through_sendspin() {
     assert_eq!(hello["type"], "client/hello");
     let p = &hello["payload"];
     assert_eq!(p["name"], "Lobby");
-    assert_eq!(p["device_info"]["product_name"], format!("Lobby @ 127.0.0.1:{rtp_port}"));
+    assert_eq!(
+        p["device_info"]["product_name"],
+        format!("Lobby @ 127.0.0.1:{rtp_port}")
+    );
     assert_eq!(p["supported_roles"], json!(["player@v1"]));
     assert_eq!(p["unpaired_access"]["enabled"], true);
-    assert_eq!(p["player@v1_support"]["supported_formats"][0], json!({"codec": "pcm", "channels": 2, "sample_rate": 48000, "bit_depth": 24}));
+    assert_eq!(
+        p["player@v1_support"]["supported_formats"][0],
+        json!({"codec": "pcm", "channels": 2, "sample_rate": 48000, "bit_depth": 24})
+    );
     s.send(json!({"type": "server/activate", "payload": {"activities": [], "active_roles": ["player@v1"]}}));
     let state = s.until("client/state", &clock);
     assert_eq!(state["payload"]["available"], true);
@@ -222,7 +260,10 @@ fn music_assistant_plays_through_sendspin() {
     }
     let got = first_loud.expect("audio arrived");
     let err = got.wrapping_sub(want) as i32;
-    assert!(err.abs() <= 5, "first sample at {got}, wanted {want} ({err} frames)");
+    assert!(
+        err.abs() <= 5,
+        "first sample at {got}, wanted {want} ({err} frames)"
+    );
     assert_eq!(engine.status("lobby").unwrap().state, PlayState::Playing);
 
     s.send(json!({"type": "stream/end", "payload": {"roles": ["player"]}}));
@@ -242,7 +283,9 @@ fn music_assistant_plays_through_sendspin() {
 
     // The identity survives: the same client id after a reload.
     let id1 = ctx.identity.lock().unwrap().client_id().to_string();
-    let reloaded = aes67_sender::sendspin::secure::Identity::load_or_create(&data_dir.join("lobby.json")).unwrap();
+    let reloaded =
+        aes67_sender::sendspin::secure::Identity::load_or_create(&data_dir.join("lobby.json"))
+            .unwrap();
     assert_eq!(reloaded.client_id(), id1);
     assert_eq!(reloaded.volume, 100);
     engine.shutdown();

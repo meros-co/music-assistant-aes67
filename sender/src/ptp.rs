@@ -92,15 +92,23 @@ pub fn start(cfg: PtpConfig, clock: Arc<Clock>, stop: Arc<AtomicBool>) -> std::i
     std::fs::create_dir_all(&cfg.run_dir)?;
     let conf_path = cfg.run_dir.join("ptp4l.conf");
     std::fs::write(&conf_path, cfg.ptp4l_conf())?;
-    std::thread::Builder::new().name("ptp".into()).spawn(move || supervise(cfg, conf_path, clock, stop))?;
+    std::thread::Builder::new()
+        .name("ptp".into())
+        .spawn(move || supervise(cfg, conf_path, clock, stop))?;
     Ok(())
 }
 
 fn supervise(cfg: PtpConfig, conf: PathBuf, clock: Arc<Clock>, stop: Arc<AtomicBool>) {
     let mut backoff = Duration::from_secs(1);
     while !stop.load(Ordering::Relaxed) {
-        log::info(&format!("starting ptp4l on {} (domain {})", cfg.interface, cfg.domain));
-        let child = std::process::Command::new(&cfg.ptp4l).arg("-f").arg(&conf).spawn();
+        log::info(&format!(
+            "starting ptp4l on {} (domain {})",
+            cfg.interface, cfg.domain
+        ));
+        let child = std::process::Command::new(&cfg.ptp4l)
+            .arg("-f")
+            .arg(&conf)
+            .spawn();
         let mut child = match child {
             Ok(c) => c,
             Err(e) => {
@@ -152,14 +160,24 @@ fn poll(cfg: &PtpConfig, clock: &Clock, stop: &AtomicBool, mut alive: impl FnMut
         }
         let p = pmc_conn.as_mut().unwrap();
         if own_identity.is_none() {
-            own_identity = p.get(pmc::DEFAULT_DATA_SET).ok().and_then(|d| pmc::parse_clock_identity(&d));
+            own_identity = p
+                .get(pmc::DEFAULT_DATA_SET)
+                .ok()
+                .and_then(|d| pmc::parse_clock_identity(&d));
         }
         if tick % 4 == 1 {
-            if let Some(tp) = p.get(pmc::TIME_PROPERTIES_DATA_SET).ok().and_then(|d| pmc::parse_time_properties(&d)) {
+            if let Some(tp) = p
+                .get(pmc::TIME_PROPERTIES_DATA_SET)
+                .ok()
+                .and_then(|d| pmc::parse_time_properties(&d))
+            {
                 timescale = tp.timescale_offset_s();
             }
         }
-        match p.get(pmc::TIME_STATUS_NP).map(|d| pmc::parse_time_status(&d)) {
+        match p
+            .get(pmc::TIME_STATUS_NP)
+            .map(|d| pmc::parse_time_status(&d))
+        {
             Ok(Some(ts)) => {
                 let we_are_gm = own_identity == Some(ts.gm_identity);
                 clock.update(&PtpSample {
@@ -205,11 +223,21 @@ mod tests {
             ptp4l: "ptp4l".into(),
         };
         let conf = cfg.ptp4l_conf();
-        for line in ["free_running 1", "clientOnly 1", "time_stamping software", "dscp_event 46", "[eth0]"] {
+        for line in [
+            "free_running 1",
+            "clientOnly 1",
+            "time_stamping software",
+            "dscp_event 46",
+            "[eth0]",
+        ] {
             assert!(conf.lines().any(|l| l == line), "missing {line}");
         }
         assert!(conf.contains("uds_address /run/aes67"));
-        let leader = PtpConfig { role: PtpRole::LeaderIfNone, ..cfg }.ptp4l_conf();
+        let leader = PtpConfig {
+            role: PtpRole::LeaderIfNone,
+            ..cfg
+        }
+        .ptp4l_conf();
         assert!(leader.lines().any(|l| l == "clientOnly 0"));
         assert!(leader.lines().any(|l| l == "priority1 250"));
     }

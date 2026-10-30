@@ -137,7 +137,11 @@ fn de_num<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
 pub fn parse_map(s: &str) -> Result<Vec<u8>, String> {
     s.split([',', ' '])
         .filter(|p| !p.is_empty())
-        .map(|p| p.trim().parse::<u8>().map_err(|_| format!("channel map '{s}': '{p}' is not a channel number")))
+        .map(|p| {
+            p.trim()
+                .parse::<u8>()
+                .map_err(|_| format!("channel map '{s}': '{p}' is not a channel number"))
+        })
         .collect()
 }
 
@@ -164,7 +168,11 @@ impl AddonOptions {
     pub fn outputs(&self) -> Result<Vec<(String, OutputConfig)>, String> {
         let mut v: Vec<(String, OutputConfig)> = Vec::new();
         for o in &self.outputs {
-            let base = o.id.clone().filter(|i| !i.is_empty()).map(|i| slug(&i)).unwrap_or_else(|| slug(&o.name));
+            let base =
+                o.id.clone()
+                    .filter(|i| !i.is_empty())
+                    .map(|i| slug(&i))
+                    .unwrap_or_else(|| slug(&o.name));
             let mut id = base.clone();
             let mut n = 2;
             while v.iter().any(|(i, _)| *i == id) {
@@ -184,7 +192,8 @@ impl AddonOptions {
                 channel_map: parse_map(&o.channel_map)?,
                 keep_alive: o.keep_alive,
             };
-            cfg.validate().map_err(|e| format!("output '{}': {e}", o.name))?;
+            cfg.validate()
+                .map_err(|e| format!("output '{}': {e}", o.name))?;
             v.push((id, cfg));
         }
         Ok(v)
@@ -206,10 +215,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(o.ptp_role, PtpRole::LeaderIfNone);
-        assert_eq!((o.api_port, o.sendspin_port, o.receiver_latency_ms), (8890, 8928, 3));
+        assert_eq!(
+            (o.api_port, o.sendspin_port, o.receiver_latency_ms),
+            (8890, 8928, 3)
+        );
         // The second Lobby clashes on channel 1, but ids are still made unique.
         let outs = o.outputs().unwrap();
-        assert_eq!(outs.iter().map(|o| o.0.as_str()).collect::<Vec<_>>(), ["lobby", "lobby-2", "bar"]);
+        assert_eq!(
+            outs.iter().map(|o| o.0.as_str()).collect::<Vec<_>>(),
+            ["lobby", "lobby-2", "bar"]
+        );
         assert_eq!(outs[2].1.channel_map, vec![2, 1]);
         assert_eq!(slug("Café Bar!"), "caf-bar");
         assert!(parse_map("1,x").is_err());

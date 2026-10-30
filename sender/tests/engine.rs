@@ -52,13 +52,20 @@ fn serve(body: Vec<u8>) -> String {
 
 fn receiver() -> (UdpSocket, u16) {
     let s = UdpSocket::bind("127.0.0.1:0").unwrap();
-    s.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
+    s.set_read_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
     let port = s.local_addr().unwrap().port();
     (s, port)
 }
 
 fn engine() -> Arc<Engine> {
-    Engine::new(Arc::new(Clock::new()), NetConfig { iface_ip: Ipv4Addr::UNSPECIFIED, dscp_media: 34 })
+    Engine::new(
+        Arc::new(Clock::new()),
+        NetConfig {
+            iface_ip: Ipv4Addr::UNSPECIFIED,
+            dscp_media: 34,
+        },
+    )
 }
 
 fn config(port: u16, channels: u8, map: Vec<u8>, keep_alive: bool) -> OutputConfig {
@@ -96,7 +103,8 @@ fn recv(s: &UdpSocket, channels: usize) -> Option<Packet> {
 fn plays_a_wav_into_mapped_channels_on_the_media_clock() {
     let (rx, port) = receiver();
     let e = engine();
-    e.upsert_output("patio", config(port, 4, vec![3, 4], false)).unwrap();
+    e.upsert_output("patio", config(port, 4, vec![3, 4], false))
+        .unwrap();
     e.set_volume("patio", Some(100), None).unwrap();
     // Idle and not kept alive: nothing is sent.
     assert!(recv(&rx, 4).is_none());
@@ -119,7 +127,10 @@ fn plays_a_wav_into_mapped_channels_on_the_media_clock() {
             // The first packet is stamped close to now on the media clock.
             let now = media_at(e.clock.ptp_now(), 48000) as u32;
             let age = now.wrapping_sub(p.h.timestamp) as i32;
-            assert!((0..48 * 20).contains(&age), "first packet {age} frames from now");
+            assert!(
+                (0..48 * 20).contains(&age),
+                "first packet {age} frames from now"
+            );
         }
         last = Some(p.h);
         let f = &p.samples[47 * 4..48 * 4];
@@ -154,7 +165,8 @@ fn plays_a_wav_into_mapped_channels_on_the_media_clock() {
 fn volume_and_mute_ramp_and_keep_alive_sends_silence() {
     let (rx, port) = receiver();
     let e = engine();
-    e.upsert_output("a", config(port, 2, vec![1, 2], true)).unwrap();
+    e.upsert_output("a", config(port, 2, vec![1, 2], true))
+        .unwrap();
     // Kept alive: silence flows while idle.
     let p = recv(&rx, 2).expect("keep-alive packets");
     assert!(p.samples.iter().all(|&s| s == 0));
@@ -188,11 +200,19 @@ fn volume_and_mute_ramp_and_keep_alive_sends_silence() {
 fn outputs_share_a_destination_and_groups_play_together() {
     let (rx, port) = receiver();
     let e = engine();
-    e.upsert_output("left", config(port, 4, vec![1, 2], false)).unwrap();
+    e.upsert_output("left", config(port, 4, vec![1, 2], false))
+        .unwrap();
     // A clashing format or channel is refused, with a reason.
-    assert!(e.upsert_output("bad", config(port, 2, vec![1, 2], false)).unwrap_err().contains("same format"));
-    assert!(e.upsert_output("bad", config(port, 4, vec![2, 3], false)).unwrap_err().contains("already used"));
-    e.upsert_output("right", config(port, 4, vec![3, 4], false)).unwrap();
+    assert!(e
+        .upsert_output("bad", config(port, 2, vec![1, 2], false))
+        .unwrap_err()
+        .contains("same format"));
+    assert!(e
+        .upsert_output("bad", config(port, 4, vec![2, 3], false))
+        .unwrap_err()
+        .contains("already used"));
+    e.upsert_output("right", config(port, 4, vec![3, 4], false))
+        .unwrap();
     for id in ["left", "right"] {
         e.set_volume(id, Some(100), None).unwrap();
     }
@@ -200,12 +220,18 @@ fn outputs_share_a_destination_and_groups_play_together() {
     let parsed = ffi::sdp_parse(&sdp).unwrap();
     assert_eq!(parsed.channels, 4);
     assert_eq!(ffi::c_str(&parsed.connection_ip), "127.0.0.1");
-    assert!(sdp.contains("c=IN IP4 127.0.0.1\r\n"), "unicast c= has no TTL: {sdp}");
+    assert!(
+        sdp.contains("c=IN IP4 127.0.0.1\r\n"),
+        "unicast c= has no TTL: {sdp}"
+    );
     assert!(sdp.contains("s=Patio + Patio"));
 
     let url = serve(wav(48000, 1.0, 0.5, -0.5));
     e.play_url("left", &url, &["right".to_string()]).unwrap();
-    assert_eq!(e.status("right").unwrap().group_leader.as_deref(), Some("left"));
+    assert_eq!(
+        e.status("right").unwrap().group_leader.as_deref(),
+        Some("left")
+    );
     let mut together = 0;
     for _ in 0..2000 {
         let Some(p) = recv(&rx, 4) else { continue };
@@ -231,8 +257,10 @@ fn outputs_share_a_destination_and_groups_play_together() {
 fn a_wrong_rate_or_dead_url_is_an_error_state() {
     let (_rx, port) = receiver();
     let e = engine();
-    e.upsert_output("x", config(port, 2, vec![1, 2], false)).unwrap();
-    e.play_url("x", &serve(wav(44100, 0.1, 0.0, 0.0)), &[]).unwrap();
+    e.upsert_output("x", config(port, 2, vec![1, 2], false))
+        .unwrap();
+    e.play_url("x", &serve(wav(44100, 0.1, 0.0, 0.0)), &[])
+        .unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
     while e.status("x").unwrap().state != PlayState::Error && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));

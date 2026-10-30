@@ -19,7 +19,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 use tungstenite::{Message, WebSocket};
 
-use super::secure::{self, choose_psk, from_b64url, Handshake, Identity, PskKind, Reassembly, Session};
+use super::secure::{
+    self, choose_psk, from_b64url, Handshake, Identity, PskKind, Reassembly, Session,
+};
 use super::timefilter::{measure, TimeFilter};
 use crate::engine::Engine;
 use crate::log;
@@ -48,7 +50,10 @@ impl ClientCtx {
     }
 
     fn name(&self) -> String {
-        let name = self.output().map(|o| o.cfg.name.clone()).unwrap_or_else(|| self.output_id.clone());
+        let name = self
+            .output()
+            .map(|o| o.cfg.name.clone())
+            .unwrap_or_else(|| self.output_id.clone());
         truncate(&name, 64)
     }
 }
@@ -128,10 +133,13 @@ impl Wire for WebSocket<TcpStream> {
     }
 
     fn recv(&mut self, timeout: Duration) -> std::io::Result<Option<Message>> {
-        self.get_mut().set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
+        self.get_mut()
+            .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
         match self.read() {
             Ok(m) => Ok(Some(m)),
-            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Err(tungstenite::Error::Io(e))
+                if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
                 let _ = self.flush();
                 Ok(None)
             }
@@ -244,14 +252,20 @@ pub fn run<W: Wire>(ctx: &ClientCtx, mut wire: W) {
             };
             let result = c.serve();
             if let Err(Fail(e)) = &result {
-                log::info(&format!("sendspin {}: connection ended: {e}", ctx.output_id));
+                log::info(&format!(
+                    "sendspin {}: connection ended: {e}",
+                    ctx.output_id
+                ));
             }
             c.end_stream();
             ctx.admission.release(conn_id);
             c.wire.close();
         }
         Err(Fail(e)) => {
-            log::debug(&format!("sendspin {}: handshake failed: {e}", ctx.output_id));
+            log::debug(&format!(
+                "sendspin {}: handshake failed: {e}",
+                ctx.output_id
+            ));
             wire.close();
         }
     }
@@ -267,7 +281,9 @@ fn recv_text<W: Wire>(wire: &mut W, timeout: Duration) -> Result<String, Fail> {
         match wire.recv(left)? {
             Some(Message::Text(t)) => return Ok(t.to_string()),
             Some(Message::Close(_)) => return Err(Fail("closed".into())),
-            Some(Message::Binary(_)) => return Err(Fail("binary frame during the handshake".into())),
+            Some(Message::Binary(_)) => {
+                return Err(Fail("binary frame during the handshake".into()))
+            }
             _ => continue,
         }
     }
@@ -285,17 +301,24 @@ fn handshake<W: Wire>(ctx: &ClientCtx, wire: &mut W) -> Result<(Session, PskKind
     if si["type"] != "server/init" || si["payload"]["version"] != secure::VERSION {
         return Err(Fail("not a version 1 server/init".into()));
     }
-    let server_id = si["payload"]["server_id"].as_str().ok_or("no server_id")?.to_string();
-    let server_static: [u8; 32] =
-        from_b64url(&server_id).and_then(|v| v.try_into().ok()).ok_or("server_id is not a key")?;
+    let server_id = si["payload"]["server_id"]
+        .as_str()
+        .ok_or("no server_id")?
+        .to_string();
+    let server_static: [u8; 32] = from_b64url(&server_id)
+        .and_then(|v| v.try_into().ok())
+        .ok_or("server_id is not a key")?;
     let mut prologue = init.into_bytes();
     prologue.extend_from_slice(server_init.as_bytes());
     let msg1 = recv_text(wire, Duration::from_secs(30))?;
     let (session, kind) = {
         let id = ctx.identity.lock().unwrap();
         respond(&id, &server_id, &server_static, &prologue, &msg1, |m2| {
-            wire.send_text(&json!({"type": "noise/handshake", "payload": {"data": secure::b64url(m2)}}).to_string())
-                .map_err(Fail::from)
+            wire.send_text(
+                &json!({"type": "noise/handshake", "payload": {"data": secure::b64url(m2)}})
+                    .to_string(),
+            )
+            .map_err(Fail::from)
         })?
     };
     Ok((session, kind, server_id))
@@ -314,7 +337,10 @@ fn respond(
     if m["type"] != "noise/handshake" {
         return Err(Fail("expected noise/handshake".into()));
     }
-    let data = m["payload"]["data"].as_str().and_then(from_b64url).ok_or("bad handshake data")?;
+    let data = m["payload"]["data"]
+        .as_str()
+        .and_then(from_b64url)
+        .ok_or("bad handshake data")?;
     let mut hs = Handshake::new(id, server_static, prologue)?;
     let payload: Value = serde_json::from_slice(&hs.read_first(&data)?)?;
     let category = payload["psk_category"].as_str().ok_or("no psk_category")?;
@@ -322,7 +348,8 @@ fn respond(
         return Err(Fail("bad psk_category".into()));
     }
     let wanted = payload["psk_id"].as_str().ok_or("no psk_id")?;
-    let (psk, kind) = choose_psk(id, server_id, wanted, category).ok_or("long-term PSK of another server")?;
+    let (psk, kind) =
+        choose_psk(id, server_id, wanted, category).ok_or("long-term PSK of another server")?;
     let (m2, session) = hs.write_second(&psk)?;
     send(&m2)?;
     Ok((session, kind))
@@ -360,9 +387,14 @@ impl<W: Wire> Conn<'_, W> {
             }
             self.tick_clock()?;
             match self.wire.recv(Duration::from_millis(20))? {
-                None | Some(Message::Ping(_)) | Some(Message::Pong(_)) | Some(Message::Frame(_)) => {}
+                None
+                | Some(Message::Ping(_))
+                | Some(Message::Pong(_))
+                | Some(Message::Frame(_)) => {}
                 Some(Message::Close(_)) => return Err(Fail("closed by the server".into())),
-                Some(Message::Text(_)) => return Err(Fail("text frame after the handshake".into())),
+                Some(Message::Text(_)) => {
+                    return Err(Fail("text frame after the handshake".into()))
+                }
                 Some(Message::Binary(b)) => {
                     let plain = self.session.decrypt(&b)?;
                     if let Some(msg) = self.reassembly.feed(plain).map_err(|e| Fail(e.into()))? {
@@ -425,10 +457,17 @@ impl<W: Wire> Conn<'_, W> {
                     let want_rate = self.ctx.output().map(|o| o.cfg.sample_rate).unwrap_or(0);
                     self.format = match (codec, format) {
                         ("pcm", Some(f)) if rate == want_rate && (1..=8).contains(&channels) => {
-                            Some(PcmFormat { rate, channels, format: f })
+                            Some(PcmFormat {
+                                rate,
+                                channels,
+                                format: f,
+                            })
                         }
                         _ => {
-                            log::warn(&format!("sendspin {}: unexpected stream format {pl}", self.ctx.output_id));
+                            log::warn(&format!(
+                                "sendspin {}: unexpected stream format {pl}",
+                                self.ctx.output_id
+                            ));
                             None
                         }
                     };
@@ -463,7 +502,10 @@ impl<W: Wire> Conn<'_, W> {
                     let mut id = self.ctx.identity.lock().unwrap();
                     id.add_record(&self.server_id, psk, unix_now());
                     let _ = id.save();
-                    log::info(&format!("sendspin {}: paired with {}", self.ctx.output_id, self.server_id));
+                    log::info(&format!(
+                        "sendspin {}: paired with {}",
+                        self.ctx.output_id, self.server_id
+                    ));
                 }
             }
             _ => {}
@@ -472,7 +514,11 @@ impl<W: Wire> Conn<'_, W> {
     }
 
     fn send_hello(&mut self) -> Result<(), Fail> {
-        let rate = self.ctx.output().map(|o| o.cfg.sample_rate).unwrap_or(48000);
+        let rate = self
+            .ctx
+            .output()
+            .map(|o| o.cfg.sample_rate)
+            .unwrap_or(48000);
         // Music Assistant shows product_name as the player's model: name the stream there,
         // "<session> @ <address>:<port>", the form controllers read it in.
         let product = self
@@ -500,8 +546,10 @@ impl<W: Wire> Conn<'_, W> {
     }
 
     fn on_activate(&mut self, p: &Value) -> Result<(), Fail> {
-        let activities: Vec<&str> =
-            p["activities"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
+        let activities: Vec<&str> = p["activities"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
         let playback = activities.contains(&"playback");
         let pairing = activities.contains(&"pairing");
         let allowed = match self.psk_kind {
@@ -509,17 +557,48 @@ impl<W: Wire> Conn<'_, W> {
             // Unpaired access is on, so playback is allowed here too.
             PskKind::Pairing | PskKind::Sentinel => true,
         };
-        if !allowed || activities.iter().any(|a| !["playback", "pairing"].contains(a)) {
+        if !allowed
+            || activities
+                .iter()
+                .any(|a| !["playback", "pairing"].contains(a))
+        {
             return self.goodbye("unauthorized");
         }
         let roles: Option<Vec<String>> =
-            p.get("active_roles").and_then(|r| r.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect());
-        let roles = if self.activated { roles } else { Some(roles.unwrap_or_default()) };
-        let rank = if playback { 2 } else if pairing { 1 } else { 0 };
-        let preferred = self.ctx.identity.lock().unwrap().last_playback_server.as_deref() == Some(self.server_id.as_str());
-        if !self.ctx.admission.admit(self.conn_id, rank, preferred, &self.kick) {
+            p.get("active_roles").and_then(|r| r.as_array()).map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            });
+        let roles = if self.activated {
+            roles
+        } else {
+            Some(roles.unwrap_or_default())
+        };
+        let rank = if playback {
+            2
+        } else if pairing {
+            1
+        } else {
+            0
+        };
+        let preferred = self
+            .ctx
+            .identity
+            .lock()
+            .unwrap()
+            .last_playback_server
+            .as_deref()
+            == Some(self.server_id.as_str());
+        if !self
+            .ctx
+            .admission
+            .admit(self.conn_id, rank, preferred, &self.kick)
+        {
             if pairing {
-                let _ = self.send_json(json!({"type": "pair/abort", "payload": {"reason": "concurrent_attempt"}}));
+                let _ = self.send_json(
+                    json!({"type": "pair/abort", "payload": {"reason": "concurrent_attempt"}}),
+                );
             }
             return self.goodbye("concurrent_attempt");
         }
@@ -552,7 +631,9 @@ impl<W: Wire> Conn<'_, W> {
             self.pairing_index += 1;
             let method = p["pairing"]["method"].as_str().unwrap_or("");
             if method != "pairing_psk" || self.psk_kind != PskKind::Pairing {
-                return self.send_json(json!({"type": "pair/abort", "payload": {"reason": "method_not_supported"}}));
+                return self.send_json(
+                    json!({"type": "pair/abort", "payload": {"reason": "method_not_supported"}}),
+                );
             }
             let lt = secure::random32();
             self.pending_lt = Some(lt);
@@ -566,21 +647,31 @@ impl<W: Wire> Conn<'_, W> {
 
     /// An in-band re-handshake (to the pairing PSK, or to a fresh long-term one).
     fn rehandshake(&mut self, p: &Value) -> Result<(), Fail> {
-        let server_static: [u8; 32] =
-            from_b64url(&self.server_id).and_then(|v| v.try_into().ok()).ok_or("server_id is not a key")?;
+        let server_static: [u8; 32] = from_b64url(&self.server_id)
+            .and_then(|v| v.try_into().ok())
+            .ok_or("server_id is not a key")?;
         let msg1 = json!({"type": "noise/handshake", "payload": p}).to_string();
         let prologue = self.session.hash.clone();
         let mut m2_out = None;
         let (session, kind) = {
             let id = self.ctx.identity.lock().unwrap();
-            respond(&id, &self.server_id, &server_static, &prologue, &msg1, |m2| {
-                m2_out = Some(m2.to_vec());
-                Ok(())
-            })?
+            respond(
+                &id,
+                &self.server_id,
+                &server_static,
+                &prologue,
+                &msg1,
+                |m2| {
+                    m2_out = Some(m2.to_vec());
+                    Ok(())
+                },
+            )?
         };
         let m2 = m2_out.unwrap();
         // Message 2 still travels under the old keys.
-        self.send_json(json!({"type": "noise/handshake", "payload": {"data": secure::b64url(&m2)}}))?;
+        self.send_json(
+            json!({"type": "noise/handshake", "payload": {"data": secure::b64url(&m2)}}),
+        )?;
         self.session = session;
         self.psk_kind = kind;
         self.pairing_index = 0;
@@ -589,7 +680,9 @@ impl<W: Wire> Conn<'_, W> {
     }
 
     fn on_command(&mut self, cmd: &Value) -> Result<(), Fail> {
-        let Some(o) = self.ctx.output() else { return Ok(()) };
+        let Some(o) = self.ctx.output() else {
+            return Ok(());
+        };
         match cmd["command"].as_str() {
             Some("volume") => {
                 if let Some(v) = cmd["volume"].as_u64() {
@@ -622,7 +715,11 @@ impl<W: Wire> Conn<'_, W> {
     }
 
     fn send_state(&mut self) -> Result<(), Fail> {
-        let (volume, muted) = self.ctx.output().map(|o| (o.volume(), o.muted())).unwrap_or((0, false));
+        let (volume, muted) = self
+            .ctx
+            .output()
+            .map(|o| (o.volume(), o.muted()))
+            .unwrap_or((0, false));
         let delay = self.ctx.identity.lock().unwrap().output_delay_ms;
         self.send_json(json!({"type": "client/state", "payload": {
             "available": true,
@@ -658,10 +755,14 @@ impl<W: Wire> Conn<'_, W> {
             self.expected = None;
             self.start_burst();
         }
-        if self.awaiting_time.is_some_and(|t| client_now_us(&self.ctx.engine) - t > 2_000_000) {
+        if self
+            .awaiting_time
+            .is_some_and(|t| client_now_us(&self.ctx.engine) - t > 2_000_000)
+        {
             self.awaiting_time = None;
         }
-        if self.awaiting_time.is_none() && self.burst_left == 0 && Instant::now() >= self.next_burst {
+        if self.awaiting_time.is_none() && self.burst_left == 0 && Instant::now() >= self.next_burst
+        {
             self.burst_left = 8;
             self.burst_best = None;
         }
@@ -678,9 +779,11 @@ impl<W: Wire> Conn<'_, W> {
 
     fn on_time(&mut self, p: &Value) {
         let t4 = client_now_us(&self.ctx.engine);
-        let (Some(t1), Some(t2), Some(t3)) =
-            (p["client_transmitted"].as_i64(), p["server_received"].as_i64(), p["server_transmitted"].as_i64())
-        else {
+        let (Some(t1), Some(t2), Some(t3)) = (
+            p["client_transmitted"].as_i64(),
+            p["server_received"].as_i64(),
+            p["server_transmitted"].as_i64(),
+        ) else {
             return;
         };
         if self.awaiting_time != Some(t1) {
@@ -696,7 +799,11 @@ impl<W: Wire> Conn<'_, W> {
             if let Some((m, e, t)) = self.burst_best.take() {
                 self.filter.update(m, e, t);
             }
-            let wait = if self.filter.count() < 4 || self.filter.error_us() > 1000.0 { 200 } else { 3000 };
+            let wait = if self.filter.count() < 4 || self.filter.error_us() > 1000.0 {
+                200
+            } else {
+                3000
+            };
             self.next_burst = Instant::now() + Duration::from_millis(wait);
         }
     }
@@ -711,13 +818,18 @@ impl<W: Wire> Conn<'_, W> {
     }
 
     fn on_audio(&mut self, server_ts: i64, payload: &[u8]) {
-        let (Some(o), Some(f)) = (self.ctx.output(), self.format) else { return };
+        let (Some(o), Some(f)) = (self.ctx.output(), self.format) else {
+            return;
+        };
         let delay_us = self.ctx.identity.lock().unwrap().output_delay_ms as i64 * 1000;
         let play_us = self.filter.client_time(server_ts) - delay_us - self.ctx.receiver_latency_us;
         let target = media_at(play_us * 1000, f.rate);
         let mut samples = Vec::with_capacity(payload.len() / f.format.bytes());
         let frame_bytes = f.channels * f.format.bytes();
-        f.format.decode(&payload[..payload.len() / frame_bytes * frame_bytes], &mut samples);
+        f.format.decode(
+            &payload[..payload.len() / frame_bytes * frame_bytes],
+            &mut samples,
+        );
         let mut adapted = Vec::new();
         adapt_channels(&samples, f.channels, o.cfg.source_channels(), &mut adapted);
         let ch = o.cfg.source_channels();
@@ -745,14 +857,24 @@ impl<W: Wire> Conn<'_, W> {
             None => target,
         };
         let frames = (adapted.len() / ch) as u64;
-        if self.generation.is_none_or(|g| o.generation.load(Ordering::SeqCst) != g) {
-            match self.ctx.engine.begin_session(&self.ctx.output_id, &[], at, None) {
+        if self
+            .generation
+            .is_none_or(|g| o.generation.load(Ordering::SeqCst) != g)
+        {
+            match self
+                .ctx
+                .engine
+                .begin_session(&self.ctx.output_id, &[], at, None)
+            {
                 Ok((_, outs)) => self.generation = outs.first().map(|(_, g)| *g),
                 Err(_) => return,
             }
         }
         if o.timeline.write(at, &adapted, Duration::ZERO) == WriteResult::TimedOut {
-            log::debug(&format!("sendspin {}: buffer full, chunk dropped", self.ctx.output_id));
+            log::debug(&format!(
+                "sendspin {}: buffer full, chunk dropped",
+                self.ctx.output_id
+            ));
         }
         if let Some(s) = o.session.lock().unwrap().as_mut() {
             s.written_until = s.written_until.max(at + frames);
@@ -769,5 +891,8 @@ fn roles_include_player(p: &Value) -> bool {
 }
 
 fn unix_now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }

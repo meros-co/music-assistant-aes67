@@ -84,7 +84,9 @@ impl Identity {
                 return Ok(id);
             }
         }
-        let kp = snow::Builder::new(noise_params()).generate_keypair().map_err(std::io::Error::other)?;
+        let kp = snow::Builder::new(noise_params())
+            .generate_keypair()
+            .map_err(std::io::Error::other)?;
         let id = Identity {
             private_key: b64url(&kp.private),
             public_key: b64url(&kp.public),
@@ -114,11 +116,15 @@ impl Identity {
     }
 
     pub fn private(&self) -> [u8; 32] {
-        from_b64url(&self.private_key).and_then(|v| key32(&v)).expect("stored private key")
+        from_b64url(&self.private_key)
+            .and_then(|v| key32(&v))
+            .expect("stored private key")
     }
 
     pub fn pairing(&self) -> [u8; 32] {
-        from_b64url(&self.pairing_psk).and_then(|v| key32(&v)).expect("stored pairing PSK")
+        from_b64url(&self.pairing_psk)
+            .and_then(|v| key32(&v))
+            .expect("stored pairing PSK")
     }
 
     /// The operator's pairing token: "SP:0" and base32 of public key and pairing PSK.
@@ -130,9 +136,19 @@ impl Identity {
 
     pub fn add_record(&mut self, server_id: &str, psk: [u8; 32], now: u64) {
         self.records.retain(|r| r.server_id != server_id);
-        self.records.push(PairingRecord { server_id: server_id.into(), psk: b64url(&psk), last_used: now });
+        self.records.push(PairingRecord {
+            server_id: server_id.into(),
+            psk: b64url(&psk),
+            last_used: now,
+        });
         while self.records.len() > MAX_RECORDS {
-            let oldest = self.records.iter().enumerate().min_by_key(|(_, r)| r.last_used).map(|(i, _)| i).unwrap();
+            let oldest = self
+                .records
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, r)| r.last_used)
+                .map(|(i, _)| i)
+                .unwrap();
             self.records.remove(oldest);
         }
     }
@@ -153,11 +169,18 @@ pub enum PskKind {
 
 /// Picks the PSK the server's first handshake message names. None only for
 /// a long-term match recorded for a different server (a failure).
-pub fn choose_psk(id: &Identity, server_id: &str, psk_id_wanted: &str, category: &str) -> Option<([u8; 32], PskKind)> {
+pub fn choose_psk(
+    id: &Identity,
+    server_id: &str,
+    psk_id_wanted: &str,
+    category: &str,
+) -> Option<([u8; 32], PskKind)> {
     match category {
         "lt" => {
             for r in &id.records {
-                let Some(psk) = from_b64url(&r.psk).and_then(|v| key32(&v)) else { continue };
+                let Some(psk) = from_b64url(&r.psk).and_then(|v| key32(&v)) else {
+                    continue;
+                };
                 if psk_id(&psk) == psk_id_wanted {
                     return (r.server_id == server_id).then_some((psk, PskKind::LongTerm));
                 }
@@ -184,7 +207,11 @@ pub struct Handshake {
 }
 
 impl Handshake {
-    pub fn new(id: &Identity, server_static: &[u8; 32], prologue: &[u8]) -> Result<Self, snow::Error> {
+    pub fn new(
+        id: &Identity,
+        server_static: &[u8; 32],
+        prologue: &[u8],
+    ) -> Result<Self, snow::Error> {
         let private = id.private();
         let placeholder = [0u8; 32];
         let state = snow::Builder::new(noise_params())
@@ -250,7 +277,9 @@ impl Reassembly {
     /// Feeds one decrypted message; returns a whole message (type byte first)
     /// when one is complete. Err means the peer broke the framing rules.
     pub fn feed(&mut self, plain: Vec<u8>) -> Result<Option<Vec<u8>>, &'static str> {
-        let Some(&kind) = plain.first() else { return Err("empty message") };
+        let Some(&kind) = plain.first() else {
+            return Err("empty message");
+        };
         if kind != 1 {
             if self.in_flight.is_some() {
                 return Err("message inside a fragmented one");
@@ -296,7 +325,10 @@ mod tests {
             data_encoding::HEXLOWER.encode(&sentinel_psk()),
             "1b5e24dbc1aed95fc2a5a338a90c05df44bd10f5ec1f4cd66cbf86272767b9d3"
         );
-        assert_eq!(psk_id(&sentinel_psk()), "GFsV9tLaSQm9HcFWpKsgYQOr7wFTvNUtkmFwuVz3zoo");
+        assert_eq!(
+            psk_id(&sentinel_psk()),
+            "GFsV9tLaSQm9HcFWpKsgYQOr7wFTvNUtkmFwuVz3zoo"
+        );
     }
 
     #[test]
@@ -323,19 +355,33 @@ mod tests {
         let mut id = test_identity();
         let lt = random32();
         id.add_record("server-a", lt, 1);
-        assert_eq!(choose_psk(&id, "server-a", &psk_id(&lt), "lt"), Some((lt, PskKind::LongTerm)));
+        assert_eq!(
+            choose_psk(&id, "server-a", &psk_id(&lt), "lt"),
+            Some((lt, PskKind::LongTerm))
+        );
         assert_eq!(choose_psk(&id, "server-b", &psk_id(&lt), "lt"), None);
         let pr = id.pairing();
-        assert_eq!(choose_psk(&id, "x", &psk_id(&pr), "pr"), Some((pr, PskKind::Pairing)));
+        assert_eq!(
+            choose_psk(&id, "x", &psk_id(&pr), "pr"),
+            Some((pr, PskKind::Pairing))
+        );
         // A long-term id offered under the pairing category does not match.
-        assert_eq!(choose_psk(&id, "server-a", &psk_id(&lt), "pr").unwrap().1, PskKind::Sentinel);
-        assert_eq!(choose_psk(&id, "x", "nope", "sn").unwrap().1, PskKind::Sentinel);
+        assert_eq!(
+            choose_psk(&id, "server-a", &psk_id(&lt), "pr").unwrap().1,
+            PskKind::Sentinel
+        );
+        assert_eq!(
+            choose_psk(&id, "x", "nope", "sn").unwrap().1,
+            PskKind::Sentinel
+        );
     }
 
     #[test]
     fn handshake_against_an_initiator() {
         let id = test_identity();
-        let server = snow::Builder::new(noise_params()).generate_keypair().unwrap();
+        let server = snow::Builder::new(noise_params())
+            .generate_keypair()
+            .unwrap();
         let client_pub: [u8; 32] = from_b64url(&id.public_key).unwrap().try_into().unwrap();
         let server_pub: [u8; 32] = server.public.clone().try_into().unwrap();
         let prologue = b"client-initserver-init";
@@ -352,7 +398,8 @@ mod tests {
             .build_initiator()
             .unwrap();
         let mut m1 = vec![0u8; 256];
-        let payload = br#"{"psk_id":"GFsV9tLaSQm9HcFWpKsgYQOr7wFTvNUtkmFwuVz3zoo","psk_category":"sn"}"#;
+        let payload =
+            br#"{"psk_id":"GFsV9tLaSQm9HcFWpKsgYQOr7wFTvNUtkmFwuVz3zoo","psk_category":"sn"}"#;
         let n = init.write_message(payload, &mut m1).unwrap();
 
         let mut hs = Handshake::new(&id, &server_pub, prologue).unwrap();

@@ -29,8 +29,12 @@ impl SampleFormat {
         let n = self.bytes();
         out.extend(bytes.chunks_exact(n).map(|b| match self {
             SampleFormat::S16 => i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0,
-            SampleFormat::S24 => (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 8) as f32 / 8_388_608.0,
-            SampleFormat::S32 => i32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f32 / 2_147_483_648.0,
+            SampleFormat::S24 => {
+                (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 8) as f32 / 8_388_608.0
+            }
+            SampleFormat::S32 => {
+                i32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f32 / 2_147_483_648.0
+            }
             SampleFormat::F32 => f32::from_le_bytes([b[0], b[1], b[2], b[3]]),
         }));
     }
@@ -105,11 +109,19 @@ impl<R: Read> WavReader<R> {
                     if channels == 0 || channels > 8 || sample_rate == 0 {
                         return Err(bad("bad channel count or sample rate"));
                     }
-                    format = Some(WavFormat { sample_rate, channels, format: sf });
+                    format = Some(WavFormat {
+                        sample_rate,
+                        channels,
+                        format: sf,
+                    });
                 }
                 b"data" => {
                     let format = format.ok_or_else(|| bad("data before fmt"))?;
-                    return Ok(WavReader { inner, format, carry: Vec::new() });
+                    return Ok(WavReader {
+                        inner,
+                        format,
+                        carry: Vec::new(),
+                    });
                 }
                 _ => {
                     // LIST, fact and the like: skip.
@@ -192,7 +204,14 @@ mod tests {
         }
         let wav = make_wav(48000, 2, 24, false, &data);
         let mut r = WavReader::new(Trickle(wav, 0)).unwrap();
-        assert_eq!(r.format, WavFormat { sample_rate: 48000, channels: 2, format: SampleFormat::S24 });
+        assert_eq!(
+            r.format,
+            WavFormat {
+                sample_rate: 48000,
+                channels: 2,
+                format: SampleFormat::S24
+            }
+        );
         let mut out = Vec::new();
         let mut total = 0;
         loop {

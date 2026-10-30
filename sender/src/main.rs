@@ -46,10 +46,19 @@ fn pick_interface(name: &str) -> Result<(String, Ipv4Addr), String> {
     });
     let mut v4: Vec<_> = v4.collect();
     if name.is_empty() {
-        v4.sort_by_key(|(n, _)| (n.starts_with("docker") || n.starts_with("veth") || n.starts_with("hassio"), n.clone()));
-        v4.into_iter().next().ok_or_else(|| "no network interface has an IPv4 address".into())
+        v4.sort_by_key(|(n, _)| {
+            (
+                n.starts_with("docker") || n.starts_with("veth") || n.starts_with("hassio"),
+                n.clone(),
+            )
+        });
+        v4.into_iter()
+            .next()
+            .ok_or_else(|| "no network interface has an IPv4 address".into())
     } else {
-        v4.into_iter().find(|(n, _)| n == name).ok_or_else(|| format!("interface '{name}' has no IPv4 address"))
+        v4.into_iter()
+            .find(|(n, _)| n == name)
+            .ok_or_else(|| format!("interface '{name}' has no IPv4 address"))
     }
 }
 
@@ -69,17 +78,25 @@ fn hostname() -> String {
 }
 
 fn run() -> Result<(), String> {
-    let options_path = std::env::args().nth(1).unwrap_or_else(|| "/data/options.json".into());
+    let options_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "/data/options.json".into());
     let data_dir = PathBuf::from(std::env::var("AES67_DATA").unwrap_or_else(|_| "/data".into()));
-    let run_dir = PathBuf::from(std::env::var("AES67_RUN").unwrap_or_else(|_| "/run/aes67-sender".into()));
-    let text = std::fs::read_to_string(&options_path).map_err(|e| format!("{options_path}: {e}"))?;
-    let opts: AddonOptions = serde_json::from_str(&text).map_err(|e| format!("{options_path}: {e}"))?;
+    let run_dir =
+        PathBuf::from(std::env::var("AES67_RUN").unwrap_or_else(|_| "/run/aes67-sender".into()));
+    let text =
+        std::fs::read_to_string(&options_path).map_err(|e| format!("{options_path}: {e}"))?;
+    let opts: AddonOptions =
+        serde_json::from_str(&text).map_err(|e| format!("{options_path}: {e}"))?;
     log::set_debug(opts.debug);
 
     let (iface, ip) = pick_interface(&opts.interface)?;
     let mac = mac_of(&iface);
     let host = hostname();
-    log::info(&format!("AES67 sender {} on {iface} ({ip})", env!("CARGO_PKG_VERSION")));
+    log::info(&format!(
+        "AES67 sender {} on {iface} ({ip})",
+        env!("CARGO_PKG_VERSION")
+    ));
 
     let clock = Arc::new(Clock::new());
     let stop = Arc::new(AtomicBool::new(false));
@@ -98,13 +115,24 @@ fn run() -> Result<(), String> {
     )
     .map_err(|e| format!("PTP: {e}"))?;
 
-    let engine = Engine::new(clock, NetConfig { iface_ip: ip, dscp_media: opts.dscp_media });
+    let engine = Engine::new(
+        clock,
+        NetConfig {
+            iface_ip: ip,
+            dscp_media: opts.dscp_media,
+        },
+    );
     engine.start_sap().map_err(|e| format!("SAP: {e}"))?;
     let outputs = opts.outputs()?;
     let mut fixed = HashSet::new();
     for (id, cfg) in &outputs {
-        engine.upsert_output(id, cfg.clone()).map_err(|e| format!("output '{}': {e}", cfg.name))?;
-        log::info(&format!("output {id}: '{}' to {}:{}, channels {:?}", cfg.name, cfg.address, cfg.port, cfg.channel_map));
+        engine
+            .upsert_output(id, cfg.clone())
+            .map_err(|e| format!("output '{}': {e}", cfg.name))?;
+        log::info(&format!(
+            "output {id}: '{}' to {}:{}, channels {:?}",
+            cfg.name, cfg.address, cfg.port, cfg.channel_map
+        ));
         fixed.insert(id.clone());
     }
 
@@ -124,9 +152,12 @@ fn run() -> Result<(), String> {
             stop.clone(),
         );
         for (id, _) in &outputs {
-            ss.add_output(id).map_err(|e| format!("sendspin {id}: {e}"))?;
+            ss.add_output(id)
+                .map_err(|e| format!("sendspin {id}: {e}"))?;
         }
-        let listener = ss.bind().map_err(|e| format!("sendspin port {}: {e}", opts.sendspin_port))?;
+        let listener = ss
+            .bind()
+            .map_err(|e| format!("sendspin port {}: {e}", opts.sendspin_port))?;
         ss.advertise(&mdns);
         std::thread::spawn(move || ss.serve(listener));
     }
@@ -136,8 +167,12 @@ fn run() -> Result<(), String> {
         token: Some(opts.api_token.clone()).filter(|t| !t.is_empty()),
         fixed,
     });
-    let api_ip: Ipv4Addr = opts.api_bind.parse().map_err(|_| format!("api_bind '{}' is not an IPv4 address", opts.api_bind))?;
-    let server = tiny_http::Server::http((api_ip, opts.api_port)).map_err(|e| format!("API port {}: {e}", opts.api_port))?;
+    let api_ip: Ipv4Addr = opts
+        .api_bind
+        .parse()
+        .map_err(|_| format!("api_bind '{}' is not an IPv4 address", opts.api_bind))?;
+    let server = tiny_http::Server::http((api_ip, opts.api_port))
+        .map_err(|e| format!("API port {}: {e}", opts.api_port))?;
     std::thread::spawn(move || api.serve(server));
     log::info(&format!("control API on {api_ip}:{}", opts.api_port));
 
@@ -152,8 +187,19 @@ fn run() -> Result<(), String> {
                 s
             }
         };
-        let nmos = Nmos::new(engine.clone(), NmosConfig { label: format!("{host}-aes67"), hostname: host, port: opts.nmos_port, interface: iface, mac, seed });
-        let server = tiny_http::Server::http((Ipv4Addr::UNSPECIFIED, opts.nmos_port)).map_err(|e| format!("NMOS port {}: {e}", opts.nmos_port))?;
+        let nmos = Nmos::new(
+            engine.clone(),
+            NmosConfig {
+                label: format!("{host}-aes67"),
+                hostname: host,
+                port: opts.nmos_port,
+                interface: iface,
+                mac,
+                seed,
+            },
+        );
+        let server = tiny_http::Server::http((Ipv4Addr::UNSPECIFIED, opts.nmos_port))
+            .map_err(|e| format!("NMOS port {}: {e}", opts.nmos_port))?;
         let n2 = nmos.clone();
         std::thread::spawn(move || n2.serve(server));
         let mdns2 = mdns.clone();

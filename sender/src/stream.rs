@@ -105,8 +105,18 @@ impl Stream {
             stats: stats.clone(),
             stop: stop.clone(),
         };
-        let thread = std::thread::Builder::new().name(format!("tx {key}")).spawn(move || tx.run())?;
-        Ok(Stream { key, format, ssrc, outputs, stats, stop, thread: Some(thread) })
+        let thread = std::thread::Builder::new()
+            .name(format!("tx {key}"))
+            .spawn(move || tx.run())?;
+        Ok(Stream {
+            key,
+            format,
+            ssrc,
+            outputs,
+            stats,
+            stop,
+            thread: Some(thread),
+        })
     }
 
     pub fn set_outputs(&self, outputs: Vec<Arc<Output>>) {
@@ -130,7 +140,13 @@ impl Drop for Stream {
 /// A stable SSRC per destination and sender, so a restart looks like the same source.
 pub fn stream_ssrc(key: &StreamKey, net: &NetConfig) -> u32 {
     let mut h: u32 = 0x811c_9dc5;
-    for b in key.address.octets().iter().chain(&key.port.to_be_bytes()).chain(&net.iface_ip.octets()) {
+    for b in key
+        .address
+        .octets()
+        .iter()
+        .chain(&key.port.to_be_bytes())
+        .chain(&net.iface_ip.octets())
+    {
         h ^= *b as u32;
         h = h.wrapping_mul(0x0100_0193);
     }
@@ -185,7 +201,11 @@ impl Tx {
             sleep_until(due, &self.stop);
             let late = realtime_ns() - due;
             if late > MAX_LATE_NS {
-                log::warn(&format!("{}: woke {} ms late; restarting timestamps", self.key, late / 1_000_000));
+                log::warn(&format!(
+                    "{}: woke {} ms late; restarting timestamps",
+                    self.key,
+                    late / 1_000_000
+                ));
                 next = None;
                 self.stats.resyncs.fetch_add(1, Ordering::Relaxed);
                 continue;
@@ -222,7 +242,14 @@ impl Tx {
     }
 
     /// Mixes one output's frames at `ts` into `mix`; whether it wants the stream sent.
-    fn mix_output(&self, out: &Output, ts: MediaTime, fpp: usize, src: &mut Vec<f32>, mix: &mut [f32]) -> bool {
+    fn mix_output(
+        &self,
+        out: &Output,
+        ts: MediaTime,
+        fpp: usize,
+        src: &mut Vec<f32>,
+        mix: &mut [f32],
+    ) -> bool {
         let src_ch = out.cfg.source_channels();
         src.resize(fpp * src_ch, 0.0);
         // Read even when disabled, so playout (and its writers) keep moving.
@@ -238,8 +265,10 @@ impl Tx {
                     let in_range = end > s.start && (!s.ended || ts < s.written_until);
                     if in_range && present < fpp && s.error.is_none() {
                         let missing = (end.min(if s.ended { s.written_until } else { end }))
-                            .saturating_sub(ts.max(s.start)) as usize;
-                        out.underrun_frames.fetch_add(missing.saturating_sub(present) as u64, Ordering::Relaxed);
+                            .saturating_sub(ts.max(s.start))
+                            as usize;
+                        out.underrun_frames
+                            .fetch_add(missing.saturating_sub(present) as u64, Ordering::Relaxed);
                     }
                     true
                 }
@@ -269,7 +298,13 @@ fn sleep_until(realtime: i64, _stop: &AtomicBool) {
     ts.tv_sec = (realtime / 1_000_000_000) as _;
     ts.tv_nsec = (realtime % 1_000_000_000) as _;
     unsafe {
-        while libc::clock_nanosleep(libc::CLOCK_REALTIME, libc::TIMER_ABSTIME, &ts, std::ptr::null_mut()) == libc::EINTR {}
+        while libc::clock_nanosleep(
+            libc::CLOCK_REALTIME,
+            libc::TIMER_ABSTIME,
+            &ts,
+            std::ptr::null_mut(),
+        ) == libc::EINTR
+        {}
     }
 }
 
@@ -303,7 +338,10 @@ mod tests {
     fn media_time_matches_libaes67() {
         for ptp in [0i64, 999_999_999, 1_000_000_000, 1_234_567_890_123_456_789] {
             for rate in [44100, 48000, 96000] {
-                assert_eq!(media_at(ptp, rate) as u32, ffi::media_clock_ts(ptp as u64, rate));
+                assert_eq!(
+                    media_at(ptp, rate) as u32,
+                    ffi::media_clock_ts(ptp as u64, rate)
+                );
             }
         }
         assert_eq!(media_at(ptp_of(123_456, 48000), 48000), 123_456);
@@ -311,9 +349,18 @@ mod tests {
 
     #[test]
     fn ssrc_is_stable_and_distinct() {
-        let net = NetConfig { iface_ip: Ipv4Addr::new(10, 0, 0, 2), dscp_media: 34 };
-        let a = StreamKey { address: Ipv4Addr::new(239, 69, 1, 1), port: 5004 };
-        let b = StreamKey { address: Ipv4Addr::new(239, 69, 1, 2), port: 5004 };
+        let net = NetConfig {
+            iface_ip: Ipv4Addr::new(10, 0, 0, 2),
+            dscp_media: 34,
+        };
+        let a = StreamKey {
+            address: Ipv4Addr::new(239, 69, 1, 1),
+            port: 5004,
+        };
+        let b = StreamKey {
+            address: Ipv4Addr::new(239, 69, 1, 2),
+            port: 5004,
+        };
         assert_eq!(stream_ssrc(&a, &net), stream_ssrc(&a, &net));
         assert_ne!(stream_ssrc(&a, &net), stream_ssrc(&b, &net));
     }

@@ -54,7 +54,11 @@ pub fn parse(p: &[u8]) -> Option<(bool, Ipv4Addr, String)> {
     if rest.starts_with(b"application/sdp\0") {
         rest = &rest[16..];
     }
-    Some((p[0] & 0x04 != 0, origin, String::from_utf8_lossy(rest).into_owned()))
+    Some((
+        p[0] & 0x04 != 0,
+        origin,
+        String::from_utf8_lossy(rest).into_owned(),
+    ))
 }
 
 struct Announced {
@@ -82,7 +86,12 @@ impl Announcer {
     /// Brings the announcements in line with `active` (the streams being sent
     /// and their SDP). Call about once a second.
     pub fn tick(&mut self, now_ms: u64, active: &BTreeMap<StreamKey, String>) {
-        let gone: Vec<StreamKey> = self.announced.keys().filter(|k| !active.contains_key(k)).copied().collect();
+        let gone: Vec<StreamKey> = self
+            .announced
+            .keys()
+            .filter(|k| !active.contains_key(k))
+            .copied()
+            .collect();
         for k in gone {
             let a = self.announced.remove(&k).unwrap();
             self.send(&a.sdp, true);
@@ -103,7 +112,13 @@ impl Announcer {
                     self.send(sdp, false);
                 }
                 None => {
-                    self.announced.insert(*k, Announced { sdp: sdp.clone(), last_ms: now_ms });
+                    self.announced.insert(
+                        *k,
+                        Announced {
+                            sdp: sdp.clone(),
+                            last_ms: now_ms,
+                        },
+                    );
                     self.send(sdp, false);
                 }
             }
@@ -116,7 +131,9 @@ impl Announcer {
     }
 
     fn send(&self, sdp: &str, deletion: bool) {
-        let _ = self.socket.send_to(&packet(self.origin, sdp, deletion), &self.dest);
+        let _ = self
+            .socket
+            .send_to(&packet(self.origin, sdp, deletion), &self.dest);
     }
 }
 
@@ -128,7 +145,10 @@ mod tests {
     fn round_trips() {
         let p = packet(Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n", false);
         assert_eq!(p[0], 0x20);
-        assert_eq!(parse(&p), Some((false, Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n".into())));
+        assert_eq!(
+            parse(&p),
+            Some((false, Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n".into()))
+        );
         let d = packet(Ipv4Addr::new(10, 1, 2, 3), "v=0\r\n", true);
         assert!(parse(&d).unwrap().0);
         assert_eq!(&p[2..4], &d[2..4]);

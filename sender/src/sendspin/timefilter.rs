@@ -88,7 +88,8 @@ impl TimeFilter {
             return;
         }
         let offset_p = self.offset + self.drift * dt;
-        let mut p_oo_p = self.p_oo + 2.0 * self.p_od * dt + self.p_dd * dt * dt + PROCESS_STD_DEV.powi(2) * dt;
+        let mut p_oo_p =
+            self.p_oo + 2.0 * self.p_od * dt + self.p_dd * dt * dt + PROCESS_STD_DEV.powi(2) * dt;
         let mut p_od_p = self.p_od + self.p_dd * dt;
         let mut p_dd_p = self.p_dd + DRIFT_PROCESS_STD_DEV.powi(2) * dt;
         let y = m - offset_p;
@@ -108,7 +109,8 @@ impl TimeFilter {
         self.p_oo = p_oo_p - k_o * p_oo_p;
         self.p_od = p_od_p - k_d * p_oo_p;
         self.p_dd = p_dd_p - k_d * p_od_p;
-        self.use_drift = self.drift * self.drift > DRIFT_SIGNIFICANCE * DRIFT_SIGNIFICANCE * self.p_dd;
+        self.use_drift =
+            self.drift * self.drift > DRIFT_SIGNIFICANCE * DRIFT_SIGNIFICANCE * self.p_dd;
     }
 
     fn d(&self) -> f64 {
@@ -150,7 +152,11 @@ mod tests {
             c += 500_000;
         }
         let probe = c + 1_000_000;
-        assert!((f.server_time(probe) - server(probe)).abs() < 100, "{}", f.server_time(probe) - server(probe));
+        assert!(
+            (f.server_time(probe) - server(probe)).abs() < 100,
+            "{}",
+            f.server_time(probe) - server(probe)
+        );
         let back = f.client_time(f.server_time(probe));
         assert!((back - probe).abs() <= 1);
         assert!(f.error_us() < 1000.0);
