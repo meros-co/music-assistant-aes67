@@ -265,10 +265,9 @@ impl Tx {
 
 #[cfg(target_os = "linux")]
 fn sleep_until(realtime: i64, _stop: &AtomicBool) {
-    let ts = libc::timespec {
-        tv_sec: (realtime / 1_000_000_000) as libc::time_t,
-        tv_nsec: (realtime % 1_000_000_000) as libc::c_long,
-    };
+    let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
+    ts.tv_sec = (realtime / 1_000_000_000) as _;
+    ts.tv_nsec = (realtime % 1_000_000_000) as _;
     unsafe {
         while libc::clock_nanosleep(libc::CLOCK_REALTIME, libc::TIMER_ABSTIME, &ts, std::ptr::null_mut()) == libc::EINTR {}
     }
@@ -284,7 +283,9 @@ fn sleep_until(realtime: i64, _stop: &AtomicBool) {
 
 #[cfg(target_os = "linux")]
 fn raise_priority() {
-    let param = libc::sched_param { sched_priority: 70 };
+    // musl's sched_param has more fields than glibc's: start from zero.
+    let mut param: libc::sched_param = unsafe { std::mem::zeroed() };
+    param.sched_priority = 70;
     let rc = unsafe { libc::pthread_setschedparam(libc::pthread_self(), libc::SCHED_FIFO, &param) };
     if rc != 0 {
         log::debug("no real-time priority for the transmit thread (needs SYS_NICE)");

@@ -83,6 +83,9 @@ impl Api {
         let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
         match (method, parts.as_slice()) {
             (Method::Get, ["status"]) => {
+                // PTP time minus the host clock: the TAI offset plus how far the host is off.
+                let now = crate::clock::realtime_ns();
+                let ptp_minus_host = self.engine.clock.to_ptp(now) - now;
                 let outputs: Vec<Value> = self
                     .engine
                     .output_ids()
@@ -95,6 +98,7 @@ impl Api {
                     "version": env!("CARGO_PKG_VERSION"),
                     "interface": self.engine.net.iface_ip.to_string(),
                     "clock": self.engine.clock_status(),
+                    "ptp_minus_host_ns": ptp_minus_host,
                     "outputs": outputs,
                 }))
             }

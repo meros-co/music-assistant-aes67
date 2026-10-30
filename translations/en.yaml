@@ -1,0 +1,40 @@
+configuration:
+  interface:
+    name: Network interface
+    description: The interface for AES67 and PTP, such as eth0. Empty picks the first interface with an IPv4 address.
+  ptp_role:
+    name: PTP role
+    description: "follower: follow the network's grandmaster. leader_if_none: also become grandmaster when the network has none. none: no PTP (the host clock)."
+  ptp_domain:
+    name: PTP domain
+    description: AES67 uses domain 0 unless the network says otherwise.
+  receiver_latency_ms:
+    name: Receiver latency (ms)
+    description: How long after its timestamp your receivers play a sample (their link offset). Used to line Sendspin playback up with other players.
+  dscp_media:
+    name: DSCP for audio
+    description: AES67 recommends 34 (AF41).
+  dscp_ptp:
+    name: DSCP for PTP
+    description: AES67 recommends 46 (EF).
+  sendspin:
+    name: Sendspin
+    description: Offer every output to Music Assistant as a Sendspin player.
+  sendspin_port:
+    name: Sendspin port
+  api_port:
+    name: Control API port
+    description: For the Music Assistant AES67 player provider.
+  api_token:
+    name: Control API token
+    description: When set, the provider must send it.
+  nmos:
+    name: NMOS
+    description: Register the streams with an NMOS registry (IS-04) and accept IS-05 connection changes.
+  nmos_port:
+    name: NMOS port
+  debug:
+    name: Debug logging
+  outputs:
+    name: Outputs
+    description: "Each output is a speaker in Music Assistant. name and address are required; port (5004), channels (2), channel_map (1,2), sample_rate (48000), ptime_us (1000), ttl (15), session_name and keep_alive (true) are optional."

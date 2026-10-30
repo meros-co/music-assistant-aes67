@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod clock;
+pub mod config;
 pub mod engine;
 pub mod ffi;
 pub mod log;

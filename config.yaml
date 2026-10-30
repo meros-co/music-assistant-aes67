@@ -1,0 +1,55 @@
+name: AES67 Sender
+version: "0.1.0"
+slug: aes67_sender
+description: Plays Music Assistant to AES67 networks, timed by PTP
+arch:
+  - aarch64
+  - amd64
+startup: services
+boot: auto
+init: true
+host_network: true
+privileged:
+  - NET_ADMIN
+  - SYS_NICE
+options:
+  interface: ""
+  ptp_role: follower
+  ptp_domain: 0
+  receiver_latency_ms: 3
+  dscp_media: 34
+  dscp_ptp: 46
+  sendspin: true
+  sendspin_port: 8928
+  api_port: 8890
+  api_token: ""
+  nmos: true
+  nmos_port: 8891
+  debug: false
+  outputs: []
+schema:
+  interface: str?
+  ptp_role: list(follower|leader_if_none|none)
+  ptp_domain: int(0,127)
+  receiver_latency_ms: int(0,100)
+  dscp_media: int(0,63)
+  dscp_ptp: int(0,63)
+  sendspin: bool
+  sendspin_port: port
+  api_port: port
+  api_token: password?
+  nmos: bool
+  nmos_port: port
+  debug: bool
+  outputs:
+    - name: str
+      address: match(^(\d{1,3}\.){3}\d{1,3}$)
+      id: str?
+      port: port?
+      channels: int(1,64)?
+      channel_map: str?
+      sample_rate: list(44100|48000|96000)?
+      ptime_us: list(125|250|333|1000|4000)?
+      ttl: int(1,255)?
+      session_name: str?
+      keep_alive: bool?

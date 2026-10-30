@@ -166,6 +166,7 @@ fn music_assistant_plays_through_sendspin() {
     assert_eq!(hello["type"], "client/hello");
     let p = &hello["payload"];
     assert_eq!(p["name"], "Lobby");
+    assert_eq!(p["device_info"]["product_name"], format!("Lobby @ 127.0.0.1:{rtp_port}"));
     assert_eq!(p["supported_roles"], json!(["player@v1"]));
     assert_eq!(p["unpaired_access"]["enabled"], true);
     assert_eq!(p["player@v1_support"]["supported_formats"][0], json!({"codec": "pcm", "channels": 2, "sample_rate": 48000, "bit_depth": 24}));

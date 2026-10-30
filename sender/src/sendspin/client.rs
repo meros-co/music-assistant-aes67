@@ -473,8 +473,15 @@ impl<W: Wire> Conn<'_, W> {
 
     fn send_hello(&mut self) -> Result<(), Fail> {
         let rate = self.ctx.output().map(|o| o.cfg.sample_rate).unwrap_or(48000);
+        // Music Assistant shows product_name as the player's model: name the stream there,
+        // "<session> @ <address>:<port>", the form controllers read it in.
+        let product = self
+            .ctx
+            .output()
+            .map(|o| format!("{} @ {}:{}", o.cfg.session(), o.cfg.address, o.cfg.port))
+            .unwrap_or_else(|| self.ctx.product.clone());
         let mut device = json!({
-            "product_name": truncate(&self.ctx.product, 64),
+            "product_name": truncate(&product, 64),
             "manufacturer": truncate(&self.ctx.manufacturer, 64),
             "software_version": env!("CARGO_PKG_VERSION"),
         });
